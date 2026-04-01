@@ -1,25 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import BottomTabBar from '../components/BottomTabBar';
-import {
-  DEMO_FRIEND,
-  NudgeRow,
-  ProfileRow,
-  connectFriendByCode,
-  ensureProfile,
-  fetchProfile,
-  getDisplayFriendProfile,
-} from '../lib/mvp';
+import { NudgeRow, ProfileRow, connectFriendByCode, ensureProfile, fetchProfile } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
-
-const demoNudges: NudgeRow[] = [
-  {
-    id: 'demo-nudge-1',
-    sender_id: DEMO_FRIEND.id,
-    receiver_id: 'me',
-    message: '오늘 루틴 체크했어?',
-    created_at: new Date().toISOString(),
-  },
-];
 
 export default function Friends() {
   const [userId, setUserId] = useState('');
@@ -28,10 +10,32 @@ export default function Friends() {
   const [inviteCode, setInviteCode] = useState('');
   const [nudges, setNudges] = useState<NudgeRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
+    let active = true;
+
+    const loadNudges = async (currentUserId: string, currentFriendId: string) => {
+      const { data, error: nudgeError } = await supabase
+        .from('nudges')
+        .select('id, sender_id, receiver_id, message, created_at')
+        .or(
+          `and(sender_id.eq.${currentUserId},receiver_id.eq.${currentFriendId}),and(sender_id.eq.${currentFriendId},receiver_id.eq.${currentUserId})`
+        )
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (nudgeError) {
+        throw nudgeError;
+      }
+
+      if (active) {
+        setNudges((data as NudgeRow[]) ?? []);
+      }
+    };
+
     const loadFriends = async () => {
       const {
         data: { user },
@@ -46,73 +50,69 @@ export default function Friends() {
 
       try {
         const ensuredProfile = await ensureProfile(user);
-        setProfile(ensuredProfile);
 
-        let connectedFriend: ProfileRow | null = null;
-
-        try {
-          connectedFriend = await fetchProfile(ensuredProfile.friend_id);
-          setFriendProfile(connectedFriend);
-        } catch (friendError) {
-          console.warn('Friends optional friend load failed:', friendError);
-          setFriendProfile(null);
+        if (!active) {
+          return;
         }
 
+        setProfile(ensuredProfile);
+
+        const connectedFriend = await fetchProfile(ensuredProfile.friend_id);
+
+        if (!active) {
+          return;
+        }
+
+        setFriendProfile(connectedFriend);
+
         if (connectedFriend) {
-          try {
-            const { data, error: nudgeError } = await supabase
-              .from('nudges')
-              .select('id, sender_id, receiver_id, message, created_at')
-              .or(
-                `and(sender_id.eq.${user.id},receiver_id.eq.${connectedFriend.id}),and(sender_id.eq.${connectedFriend.id},receiver_id.eq.${user.id})`
-              )
-              .order('created_at', { ascending: false })
-              .limit(6);
-
-            if (nudgeError) {
-              throw nudgeError;
-            }
-
-            setNudges((data as NudgeRow[]) ?? []);
-          } catch (nudgeError) {
-            console.warn('Friends optional nudges load failed:', nudgeError);
-            setNudges([]);
-          }
+          await loadNudges(user.id, connectedFriend.id);
         } else {
           setNudges([]);
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : '친구 정보를 불러오지 못했습니다.');
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : '친구 정보를 불러오지 못했어요.');
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     loadFriends();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const displayFriend = useMemo(() => getDisplayFriendProfile(friendProfile), [friendProfile]);
-  const usingDemoFriend = !friendProfile;
-  const displayNudges = usingDemoFriend ? demoNudges : nudges;
+  const friendName = friendProfile?.nickname || '친구';
 
-  const handleConnectFriend = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleConnectFriend = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError('');
     setNotice('');
 
     if (!profile) {
-      setError('내 프로필을 먼저 불러와 주세요.');
+      setError('내 프로필을 불러온 뒤 다시 시도해 주세요.');
       return;
     }
+
+    setSubmitting(true);
 
     try {
       const connection = await connectFriendByCode(profile, inviteCode);
       setProfile(connection.profile);
       setFriendProfile(connection.friendProfile);
       setInviteCode('');
-      setNotice('친구 연결이 완료됐어요. 이제 실제 친구 데이터가 반영됩니다.');
+      setNudges([]);
+      setNotice(`${connection.friendProfile.nickname || '친구'}와 연결됐어요.`);
     } catch (connectError) {
-      setError(connectError instanceof Error ? connectError.message : '친구 연결에 실패했습니다.');
+      setError(connectError instanceof Error ? connectError.message : '친구 연결에 실패했어요.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -120,13 +120,8 @@ export default function Friends() {
     setError('');
     setNotice('');
 
-    if (!userId) {
-      setError('로그인 상태를 확인해 주세요.');
-      return;
-    }
-
-    if (usingDemoFriend) {
-      setNotice('데모 친구에게 찌르기를 보냈어요. 실제 연결 후에는 진짜 친구에게 전송됩니다.');
+    if (!userId || !friendProfile) {
+      setError('먼저 친구를 연결해 주세요.');
       return;
     }
 
@@ -134,8 +129,8 @@ export default function Friends() {
       .from('nudges')
       .insert({
         sender_id: userId,
-        receiver_id: displayFriend.id,
-        message: '오늘 루틴 아직 안 했어?',
+        receiver_id: friendProfile.id,
+        message: '오늘 루틴 아직 안 했지?',
       })
       .select('id, sender_id, receiver_id, message, created_at')
       .single();
@@ -146,7 +141,7 @@ export default function Friends() {
     }
 
     setNudges((current) => [data as NudgeRow, ...current].slice(0, 6));
-    setNotice(`${displayFriend.nickname || '친구'}에게 찌르기를 보냈어요.`);
+    setNotice(`${friendName}에게 찌르기를 보냈어요.`);
   };
 
   if (loading) {
@@ -163,7 +158,7 @@ export default function Friends() {
         <header className="subpage-header">
           <p className="section-eyebrow">Friends</p>
           <h1>친구 연결</h1>
-          <p>초대 코드로 1:1 친구를 연결하고, 루틴 배틀과 찌르기를 시작해 보세요.</p>
+          <p>초대 코드로 친구를 연결하고 실제 친구 데이터만 확인할 수 있어요.</p>
         </header>
 
         <main className="subpage-content">
@@ -177,7 +172,7 @@ export default function Friends() {
             </div>
             <article className="empty-state-card">
               <h3>{profile?.friend_code ?? '생성 중...'}</h3>
-              <p>친구가 이 코드를 입력하면 바로 1:1 루틴 배틀 상대가 됩니다.</p>
+              <p>친구가 이 코드를 입력하면 바로 1:1 루틴 연결이 시작돼요.</p>
             </article>
           </section>
 
@@ -189,59 +184,72 @@ export default function Friends() {
             <form className="invite-card" onSubmit={handleConnectFriend}>
               <input
                 type="text"
-                placeholder="친구 코드를 입력하세요"
+                placeholder="친구 코드를 입력해 주세요"
                 value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-                disabled={!!friendProfile}
+                onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+                disabled={Boolean(friendProfile) || submitting}
               />
-              <button className="primary-button" type="submit" disabled={!!friendProfile}>
-                친구 연결하기
+              <button className="primary-button" type="submit" disabled={Boolean(friendProfile) || submitting}>
+                {submitting ? '연결 중...' : '친구 연결하기'}
               </button>
             </form>
           </section>
 
           <section className="section-block">
             <div className="section-header">
-              <h2>연결 상태</h2>
-              <span>{usingDemoFriend ? '데모 친구' : '실제 친구 연결됨'}</span>
+              <h2>연결된 친구</h2>
+              <span>{friendProfile ? '1명 연결됨' : '아직 없음'}</span>
             </div>
-            <article className="friend-card">
-              <div className="friend-avatar">VS</div>
-              <div className="friend-copy">
-                <h3>{displayFriend.nickname || '친구'}</h3>
-                <p>
-                  {usingDemoFriend
-                    ? '아직 실제 연결 전이라 데모 친구가 대신 보이고 있어요.'
-                    : '지금 이 친구와 1:1 루틴 배틀 중입니다.'}
-                </p>
-              </div>
-              <button className="secondary-button friend-action" type="button" onClick={handleSendNudge}>
-                찌르기 보내기
-              </button>
-            </article>
+
+            {friendProfile ? (
+              <article className="friend-card">
+                <div className="friend-avatar">VS</div>
+                <div className="friend-copy">
+                  <h3>{friendName}</h3>
+                  <p>지금 이 친구와 실제 데이터로 루틴 배틀을 진행 중이에요.</p>
+                </div>
+                <button className="secondary-button friend-action" type="button" onClick={handleSendNudge}>
+                  찌르기 보내기
+                </button>
+              </article>
+            ) : (
+              <article className="empty-state-card">
+                <h3>연결된 친구가 아직 없어요</h3>
+                <p>위 초대 코드 입력으로 실제 친구를 연결하면 이곳에 표시돼요.</p>
+              </article>
+            )}
           </section>
 
           <section className="section-block">
             <div className="section-header">
               <h2>최근 찌르기</h2>
-              <span>최대 6개</span>
+              <span>{nudges.length}개</span>
             </div>
-            <div className="feed-list">
-              {displayNudges.map((nudge) => (
-                <article key={nudge.id} className="feed-card">
-                  <div className="feed-avatar">!</div>
-                  <div className="feed-copy">
-                    <h3>
-                      {nudge.sender_id === userId
-                        ? '내가 보낸 찌르기'
-                        : `${displayFriend.nickname || '친구'}가 보낸 찌르기`}
-                    </h3>
-                    <p>{nudge.message}</p>
-                  </div>
-                  <span className="feed-time">{new Date(nudge.created_at).toLocaleDateString()}</span>
-                </article>
-              ))}
-            </div>
+
+            {!friendProfile ? (
+              <article className="empty-state-card">
+                <h3>친구를 연결하면 찌르기를 볼 수 있어요</h3>
+                <p>데모 메시지 없이 실제 친구와 주고받은 기록만 표시돼요.</p>
+              </article>
+            ) : nudges.length === 0 ? (
+              <article className="empty-state-card">
+                <h3>아직 찌르기가 없어요</h3>
+                <p>먼저 한 번 보내서 실제 기록을 만들어 보세요.</p>
+              </article>
+            ) : (
+              <div className="feed-list">
+                {nudges.map((nudge) => (
+                  <article key={nudge.id} className="feed-card">
+                    <div className="feed-avatar">!</div>
+                    <div className="feed-copy">
+                      <h3>{nudge.sender_id === userId ? '내가 보낸 찌르기' : `${friendName}가 보낸 찌르기`}</h3>
+                      <p>{nudge.message}</p>
+                    </div>
+                    <span className="feed-time">{new Date(nudge.created_at).toLocaleDateString('ko-KR')}</span>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </main>
 

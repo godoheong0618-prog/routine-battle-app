@@ -57,13 +57,6 @@ type FriendshipRow = {
   friend_id: string;
 };
 
-export const DEMO_FRIEND: ProfileRow = {
-  id: 'demo-jaeheon',
-  nickname: '재헌',
-  friend_code: 'JAEHEON1',
-  friend_id: null,
-};
-
 export const WEEKDAY_OPTIONS: Array<{ key: RoutineDayKey; label: string }> = [
   { key: 'mon', label: '월' },
   { key: 'tue', label: '화' },
@@ -120,14 +113,6 @@ export function calculateStreak(checkins: Array<{ check_date: string }>) {
 
 export function generateFriendCode(userId: string) {
   return userId.replace(/-/g, '').slice(0, 8).toUpperCase();
-}
-
-export function getDisplayFriendProfile(friendProfile: ProfileRow | null) {
-  return friendProfile ?? DEMO_FRIEND;
-}
-
-export function isDemoFriend(friendProfile: ProfileRow | null) {
-  return !friendProfile;
 }
 
 export function isRoutineVisibleToday(routine: RoutineRow, today = getTodayDayKey()) {
@@ -277,13 +262,17 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
   const normalizedCode = inviteCode.trim().toUpperCase();
 
   if (!normalizedCode) {
-    throw new Error('移쒓뎄 肄붾뱶瑜??낅젰?댁＜?몄슂.');
+    throw new Error('친구 코드를 입력해 주세요.');
+  }
+
+  if (currentProfile.friend_code === normalizedCode) {
+    throw new Error('내 코드는 입력할 수 없어요.');
   }
 
   const currentFriendId = await resolveConnectedFriendId(currentProfile.id, currentProfile.friend_id);
 
   if (currentFriendId) {
-    throw new Error('MVP?먯꽌??移쒓뎄 1紐낅쭔 ?곌껐?????덉뼱??');
+    throw new Error('이미 연결된 친구가 있어요.');
   }
 
   const { data: targetData, error: targetError } = await supabase
@@ -297,19 +286,19 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
   }
 
   if (!targetData) {
-    throw new Error('?대떦 肄붾뱶??移쒓뎄瑜?李얠? 紐삵뻽?댁슂.');
+    throw new Error('해당 코드를 가진 친구를 찾을 수 없어요.');
   }
 
   const targetProfile = targetData as ProfileRow;
 
   if (targetProfile.id === currentProfile.id) {
-    throw new Error('??肄붾뱶??吏곸젒 ?낅젰?????놁뼱??');
+    throw new Error('내 코드는 입력할 수 없어요.');
   }
 
   const targetFriendId = await resolveConnectedFriendId(targetProfile.id, targetProfile.friend_id);
 
   if (targetFriendId) {
-    throw new Error('?대? ?ㅻⅨ 移쒓뎄? ?곌껐???ъ슜?먯삁??');
+    throw new Error('상대는 이미 다른 친구와 연결되어 있어요.');
   }
 
   const { error: friendshipInsertError } = await supabase.from('friendships').insert({
@@ -330,12 +319,24 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
     console.warn('Profile friend sync failed:', profileUpdateError);
   }
 
+  const { error: reverseProfileUpdateError } = await supabase
+    .from('profiles')
+    .update({ friend_id: currentProfile.id })
+    .eq('id', targetProfile.id);
+
+  if (reverseProfileUpdateError) {
+    console.warn('Reverse profile friend sync failed:', reverseProfileUpdateError);
+  }
+
   return {
     profile: {
       ...currentProfile,
       friend_id: targetProfile.id,
     },
-    friendProfile: targetProfile,
+    friendProfile: {
+      ...targetProfile,
+      friend_id: currentProfile.id,
+    },
   };
 }
 

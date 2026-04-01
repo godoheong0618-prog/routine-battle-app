@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
 import {
   CheckinRow,
-  DEMO_FRIEND,
   ProfileRow,
   RoutineRow,
   SharedGoalCheckinRow,
@@ -13,45 +12,11 @@ import {
   ensureProfile,
   fetchProfile,
   formatRoutineSchedule,
-  getDisplayFriendProfile,
   getTodayDayKey,
   getTodayKey,
-  isDemoFriend,
   isRoutineVisibleToday,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
-
-const quickStartDefaults = [
-  { id: 'quick-study-30', title: '공부 30분' },
-  { id: 'quick-workout-10', title: '운동 10분' },
-  { id: 'quick-water-1l', title: '물 1L' },
-  { id: 'quick-read-20', title: '독서 20분' },
-];
-
-const bonusMissions = [
-  { id: 'bonus-1', title: '오늘 개인 목표 3개 완료하면 +2점', point: '+2점' },
-  { id: 'bonus-2', title: '공동 목표 둘 다 완료하면 +3점', point: '+3점' },
-  { id: 'bonus-3', title: '친구보다 먼저 끝내면 +1점', point: '+1점' },
-];
-
-const demoSharedGoals: SharedGoalRow[] = [
-  {
-    id: 'demo-shared-1',
-    owner_id: 'demo-me',
-    friend_id: DEMO_FRIEND.id,
-    title: '공부 2시간',
-    description: '오늘 영어 단어까지 포함',
-    points: 3,
-  },
-  {
-    id: 'demo-shared-2',
-    owner_id: 'demo-me',
-    friend_id: DEMO_FRIEND.id,
-    title: '11시 전 취침',
-    description: '핸드폰 30분 전 끄기',
-    points: 3,
-  },
-];
 
 type PersonalGoalView = RoutineRow & {
   completed: boolean;
@@ -81,6 +46,8 @@ export default function Home() {
   const todayDayKey = useMemo(() => getTodayDayKey(), []);
 
   useEffect(() => {
+    let active = true;
+
     const loadHome = async () => {
       const {
         data: { user },
@@ -101,10 +68,20 @@ export default function Home() {
       try {
         ensuredProfile = await ensureProfile(user);
         connectedFriend = await fetchProfile(ensuredProfile.friend_id);
+
+        if (!active) {
+          return;
+        }
+
         setProfile(ensuredProfile);
         setFriendProfile(connectedFriend);
-      } catch (error) {
-        console.warn('Home optional profile load failed:', error);
+      } catch (loadError) {
+        console.warn('Home optional profile load failed:', loadError);
+
+        if (!active) {
+          return;
+        }
+
         setProfile({
           id: user.id,
           nickname: null,
@@ -121,11 +98,16 @@ export default function Home() {
           throw error;
         }
 
-        setRoutines((data as RoutineRow[]) ?? []);
-      } catch (error) {
-        console.warn('Home routines load failed:', error);
-        setRoutines([]);
-        setRoutineError('루틴을 불러오지 못했어요.');
+        if (active) {
+          setRoutines((data as RoutineRow[]) ?? []);
+        }
+      } catch (loadError) {
+        console.warn('Home routines load failed:', loadError);
+
+        if (active) {
+          setRoutines([]);
+          setRoutineError('루틴을 불러오지 못했어요.');
+        }
       }
 
       const relatedUserIds =
@@ -133,39 +115,48 @@ export default function Home() {
 
       const [checkinsResult, sharedGoalsResult] = await Promise.allSettled([
         supabase.from('checkins').select('user_id, routine_id, check_date').in('user_id', relatedUserIds),
-        supabase
-          .from('shared_goals')
-          .select('*')
-          .or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
+        supabase.from('shared_goals').select('*').or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
       ]);
 
       if (checkinsResult.status === 'fulfilled') {
         const { data, error } = checkinsResult.value;
+
         if (error) {
           console.warn('Home optional checkins load failed:', error);
-          setCheckins([]);
-        } else {
+          if (active) {
+            setCheckins([]);
+          }
+        } else if (active) {
           setCheckins((data as CheckinRow[]) ?? []);
         }
       } else {
         console.warn('Home optional checkins load failed:', checkinsResult.reason);
-        setCheckins([]);
+        if (active) {
+          setCheckins([]);
+        }
       }
 
       let loadedSharedGoals: SharedGoalRow[] = [];
 
       if (sharedGoalsResult.status === 'fulfilled') {
         const { data, error } = sharedGoalsResult.value;
+
         if (error) {
           console.warn('Home optional shared goals load failed:', error);
-          setSharedGoals([]);
+          if (active) {
+            setSharedGoals([]);
+          }
         } else {
           loadedSharedGoals = (data as SharedGoalRow[]) ?? [];
-          setSharedGoals(loadedSharedGoals);
+          if (active) {
+            setSharedGoals(loadedSharedGoals);
+          }
         }
       } else {
         console.warn('Home optional shared goals load failed:', sharedGoalsResult.reason);
-        setSharedGoals([]);
+        if (active) {
+          setSharedGoals([]);
+        }
       }
 
       if (loadedSharedGoals.length > 0) {
@@ -181,23 +172,32 @@ export default function Home() {
             throw error;
           }
 
-          setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
-        } catch (error) {
-          console.warn('Home optional shared goal checkins load failed:', error);
-          setSharedGoalCheckins([]);
+          if (active) {
+            setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
+          }
+        } catch (loadError) {
+          console.warn('Home optional shared goal checkins load failed:', loadError);
+          if (active) {
+            setSharedGoalCheckins([]);
+          }
         }
-      } else {
+      } else if (active) {
         setSharedGoalCheckins([]);
       }
 
-      setLoading(false);
+      if (active) {
+        setLoading(false);
+      }
     };
 
     loadHome();
+
+    return () => {
+      active = false;
+    };
   }, [navigate]);
 
-  const displayFriend = useMemo(() => getDisplayFriendProfile(friendProfile), [friendProfile]);
-  const usingDemoFriend = isDemoFriend(friendProfile);
+  const friendName = friendProfile?.nickname || '친구';
 
   const todayRoutines = useMemo(
     () => routines.filter((routine) => isRoutineVisibleToday(routine, todayDayKey)),
@@ -224,39 +224,30 @@ export default function Home() {
   }, [completedRoutineIds, todayRoutines]);
 
   const quickStarts = useMemo(() => {
-    if (todayRoutines.length === 0) {
-      return quickStartDefaults;
-    }
-
     return todayRoutines.slice(0, 4).map((routine) => ({
       id: routine.id,
       title: routine.title,
     }));
   }, [todayRoutines]);
 
-  const visibleSharedGoals = useMemo(() => {
-    return sharedGoals.length > 0 ? sharedGoals : demoSharedGoals;
-  }, [sharedGoals]);
-
   const sharedGoalViews = useMemo<SharedGoalView[]>(() => {
-    return visibleSharedGoals.map((goal, index) => ({
+    if (!friendProfile) {
+      return [];
+    }
+
+    return sharedGoals.map((goal) => ({
       ...goal,
       myDoneToday: sharedGoalCheckins.some(
+        (checkin) => checkin.goal_id === goal.id && checkin.user_id === userId && checkin.check_date === todayKey
+      ),
+      friendDoneToday: sharedGoalCheckins.some(
         (checkin) =>
           checkin.goal_id === goal.id &&
-          checkin.user_id === userId &&
+          checkin.user_id === friendProfile.id &&
           checkin.check_date === todayKey
       ),
-      friendDoneToday: friendProfile
-        ? sharedGoalCheckins.some(
-            (checkin) =>
-              checkin.goal_id === goal.id &&
-              checkin.user_id === friendProfile.id &&
-              checkin.check_date === todayKey
-          )
-        : index === 0,
     }));
-  }, [friendProfile, sharedGoalCheckins, todayKey, userId, visibleSharedGoals]);
+  }, [friendProfile, sharedGoalCheckins, sharedGoals, todayKey, userId]);
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -272,12 +263,19 @@ export default function Home() {
   const completedCount = personalGoals.filter((goal) => goal.completed).length;
   const totalCount = todayRoutines.length;
   const progress = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
-
-  const displayMyScore = usingDemoFriend ? Math.max(battleSummary.myScore, completedCount * 2) : battleSummary.myScore;
-  const displayFriendScore = usingDemoFriend ? 10 : battleSummary.friendScore;
-  const displayDifference = displayMyScore - displayFriendScore;
-  const battleLeader =
-    displayDifference >= 0 ? `${profile?.nickname ?? '내가'}가 앞서고 있어` : `${displayFriend.nickname || '친구'}가 앞서고 있어`;
+  const displayMyScore = battleSummary.myScore;
+  const displayFriendScore = friendProfile ? battleSummary.friendScore : 0;
+  const displayDifference = Math.abs(displayMyScore - displayFriendScore);
+  const battleLeader = friendProfile
+    ? displayMyScore === displayFriendScore
+      ? '지금은 동점이에요'
+      : displayMyScore > displayFriendScore
+        ? `${profile?.nickname || '내가'}가 앞서고 있어요`
+        : `${friendName}가 앞서고 있어요`
+    : '친구를 연결하면 주간 배틀이 시작돼요';
+  const battleScoreText = friendProfile
+    ? `나 ${displayMyScore}점 · ${friendName} ${displayFriendScore}점 · ${displayDifference}점 차이`
+    : '친구를 연결하면 실제 점수 비교가 시작돼요.';
 
   const handleToggleRoutine = async (routineId: string) => {
     if (!userId) {
@@ -339,6 +337,7 @@ export default function Home() {
     }
 
     const confirmed = window.confirm('이 루틴을 삭제할까요?');
+
     if (!confirmed) {
       return;
     }
@@ -383,8 +382,8 @@ export default function Home() {
       return;
     }
 
-    if (usingDemoFriend) {
-      setNotice('재헌과의 공동 목표는 지금 데모 상태로 보여주고 있어요.');
+    if (!friendProfile) {
+      setNotice('친구를 연결한 뒤 공동 목표를 체크할 수 있어요.');
       return;
     }
 
@@ -445,15 +444,15 @@ export default function Home() {
       return;
     }
 
-    if (usingDemoFriend) {
-      setNotice(`재헌에게 "${goalTitle ?? '오늘 루틴'}" 찌르기를 보냈어요. (MVP 데모)`);
+    if (!friendProfile) {
+      setNotice('친구를 먼저 연결해 주세요.');
       return;
     }
 
     const { error } = await supabase.from('nudges').insert({
       sender_id: userId,
-      receiver_id: displayFriend.id,
-      message: goalTitle ? `${goalTitle} 아직 안 했지?` : '아직 안 했지? 오늘 루틴 체크해!',
+      receiver_id: friendProfile.id,
+      message: goalTitle ? `${goalTitle} 아직 안 했지?` : '오늘 루틴 아직 안 했지?',
     });
 
     if (error) {
@@ -462,7 +461,7 @@ export default function Home() {
       return;
     }
 
-    setNotice(`${displayFriend.nickname || '친구'}에게 찌르기를 보냈어요.`);
+    setNotice(`${friendName}에게 찌르기를 보냈어요.`);
   };
 
   if (loading) {
@@ -486,7 +485,7 @@ export default function Home() {
               </p>
             </div>
             <button className="home-bell-button" type="button" aria-label="알림">
-              🔔
+              •
             </button>
           </div>
 
@@ -506,14 +505,11 @@ export default function Home() {
             <div className="battle-copy">
               <p className="battle-label">이번 주 배틀</p>
               <h2 className="battle-title battle-title-large">{battleLeader}</h2>
-              <p className="battle-score battle-score-tight">
-                나 {displayMyScore}점 · {displayFriend.nickname || '친구'} {displayFriendScore}점 ·{' '}
-                {Math.abs(displayDifference)}점 차이
-              </p>
+              <p className="battle-score battle-score-tight">{battleScoreText}</p>
             </div>
-            <Link className="battle-rule-card" to="/battle">
-              <span>벌칙</span>
-              <strong>이번 주 진 사람은 음료 사기</strong>
+            <Link className="battle-rule-card" to={friendProfile ? '/battle' : '/friends'}>
+              <span>{friendProfile ? '배틀' : '친구 연결'}</span>
+              <strong>{friendProfile ? '공동 목표와 점수를 확인해 보세요' : '친구를 연결하고 실제 배틀을 시작해 보세요'}</strong>
             </Link>
           </section>
 
@@ -522,28 +518,24 @@ export default function Home() {
               <h2>오늘 바로 시작</h2>
               <Link to="/create-routine">+ 추가</Link>
             </div>
-            <div className="quick-grid quick-grid-polished">
-              {quickStarts.map((item) => (
-                <button key={item.id} className="quick-chip quick-chip-polished" type="button">
-                  {item.title}
-                </button>
-              ))}
-            </div>
-          </section>
 
-          <section className="home-section">
-            <div className="section-header">
-              <h2>오늘의 보너스 미션</h2>
-              <span className="mission-hint">점수 추가</span>
-            </div>
-            <div className="bonus-list">
-              {bonusMissions.map((mission) => (
-                <article key={mission.id} className="bonus-card bonus-card-polished">
-                  <span>{mission.title}</span>
-                  <strong>{mission.point}</strong>
-                </article>
-              ))}
-            </div>
+            {quickStarts.length === 0 ? (
+              <article className="empty-state-card">
+                <h3>오늘 표시할 루틴이 아직 없어요</h3>
+                <p>샘플 데이터 없이 실제 루틴만 보여줘요. 새 루틴을 추가해 보세요.</p>
+                <Link className="inline-action-link" to="/create-routine">
+                  루틴 만들기
+                </Link>
+              </article>
+            ) : (
+              <div className="quick-grid quick-grid-polished">
+                {quickStarts.map((item) => (
+                  <button key={item.id} className="quick-chip quick-chip-polished" type="button">
+                    {item.title}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="home-section">
@@ -557,8 +549,8 @@ export default function Home() {
 
             {personalGoals.length === 0 ? (
               <article className="empty-state-card">
-                <h3>오늘 보여줄 루틴이 아직 없어요.</h3>
-                <p>매일 루틴을 만들거나 오늘 요일에 맞는 특정 요일 루틴을 추가해보세요.</p>
+                <h3>오늘 보여줄 루틴이 아직 없어요</h3>
+                <p>매일 루틴을 만들거나 오늘 요일에 맞는 특정 요일 루틴을 추가해 보세요.</p>
                 <Link className="inline-action-link" to="/create-routine">
                   루틴 만들기
                 </Link>
@@ -604,54 +596,77 @@ export default function Home() {
           <section className="home-section">
             <div className="section-header">
               <h2>공동 목표</h2>
-              <Link to="/battle">배틀 관리</Link>
+              <Link to={friendProfile ? '/battle' : '/friends'}>{friendProfile ? '배틀 관리' : '친구 연결'}</Link>
             </div>
 
-            <div className="shared-list">
-              {sharedGoalViews.map((goal) => (
-                <article key={goal.id} className="shared-card shared-card-polished">
-                  <div className="shared-header">
-                    <div>
-                      <h3>{goal.title}</h3>
-                      <p>{goal.description || '같이 달성하면 추가 점수를 얻는 공동 목표예요.'}</p>
-                      <span className="shared-status-note">
-                        {goal.myDoneToday && goal.friendDoneToday
-                          ? '오늘 둘 다 완료했어요. 보너스 점수 가능!'
-                          : goal.friendDoneToday
-                            ? `${displayFriend.nickname || '친구'}가 먼저 완료했어요.`
-                            : `${displayFriend.nickname || '친구'}와 같이 진행 중이에요.`}
-                      </span>
+            {!friendProfile ? (
+              <article className="empty-state-card">
+                <h3>공동 목표는 친구 연결 후 사용할 수 있어요</h3>
+                <p>데모 목표 없이 실제 친구와 만든 공동 목표만 이곳에 표시돼요.</p>
+                <Link className="inline-action-link" to="/friends">
+                  친구 연결하러 가기
+                </Link>
+              </article>
+            ) : sharedGoalViews.length === 0 ? (
+              <article className="empty-state-card">
+                <h3>아직 공동 목표가 없어요</h3>
+                <p>{friendName}와 함께할 목표를 만들면 이곳에 실제 데이터가 쌓여요.</p>
+                <Link className="inline-action-link" to="/battle">
+                  공동 목표 만들기
+                </Link>
+              </article>
+            ) : (
+              <div className="shared-list">
+                {sharedGoalViews.map((goal) => (
+                  <article key={goal.id} className="shared-card shared-card-polished">
+                    <div className="shared-header">
+                      <div>
+                        <h3>{goal.title}</h3>
+                        <p>{goal.description || '같이 달성하면 추가 점수를 얻는 공동 목표예요.'}</p>
+                        <span className="shared-status-note">
+                          {goal.myDoneToday && goal.friendDoneToday
+                            ? '오늘 둘 다 완료했어요.'
+                            : goal.friendDoneToday
+                              ? `${friendName}가 먼저 완료했어요.`
+                              : `${friendName}와 같이 진행 중이에요.`}
+                        </span>
+                      </div>
+                      <span className="proof-pill">+{goal.points ?? 3}점</span>
                     </div>
-                    <span className="proof-pill">+{goal.points ?? 3}점</span>
-                  </div>
 
-                  <div className="shared-players">
-                    <div className="shared-player-box">
-                      <span>나</span>
-                      <strong>{goal.myDoneToday ? '완료' : '미완료'}</strong>
+                    <div className="shared-players">
+                      <div className="shared-player-box">
+                        <span>나</span>
+                        <strong>{goal.myDoneToday ? '완료' : '미완료'}</strong>
+                      </div>
+                      <div className="shared-player-box">
+                        <span>{friendName}</span>
+                        <strong>{goal.friendDoneToday ? '완료' : '미완료'}</strong>
+                      </div>
                     </div>
-                    <div className="shared-player-box">
-                      <span>{displayFriend.nickname || '친구'}</span>
-                      <strong>{goal.friendDoneToday ? '완료' : '미완료'}</strong>
+
+                    <div className="shared-actions">
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={() => handleToggleSharedGoal(goal.id)}
+                        disabled={pendingAction === `shared-${goal.id}`}
+                      >
+                        {pendingAction === `shared-${goal.id}` ? '저장 중...' : goal.myDoneToday ? '완료 취소' : '완료하기'}
+                      </button>
+                      <button className="secondary-button" type="button" onClick={() => handleSendNudge(goal.title)}>
+                        찌르기
+                      </button>
                     </div>
-                  </div>
 
-                  <div className="shared-actions">
-                    <button className="primary-button" type="button" onClick={() => handleToggleSharedGoal(goal.id)}>
-                      {goal.myDoneToday ? '완료 취소' : '완료하기'}
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => handleSendNudge(goal.title)}>
-                      찌르기
-                    </button>
-                  </div>
-
-                  <div className="shared-tags">
-                    <span>{usingDemoFriend ? '재헌 더미 연결' : '실제 친구 연결'}</span>
-                    <span>메모 가능</span>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <div className="shared-tags">
+                      <span>실제 친구 연결</span>
+                      <span>실시간 체크</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </main>
 

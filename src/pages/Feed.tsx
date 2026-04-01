@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import BottomTabBar from '../components/BottomTabBar';
 import {
   CheckinRow,
-  DEMO_FRIEND,
   NudgeRow,
   ProfileRow,
   RoutineRow,
@@ -10,7 +9,6 @@ import {
   SharedGoalRow,
   ensureProfile,
   fetchProfile,
-  getDisplayFriendProfile,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -22,25 +20,6 @@ type FeedItem = {
   emoji: string;
   sortKey: string;
 };
-
-const demoFeedItems: FeedItem[] = [
-  {
-    id: 'demo-feed-1',
-    title: '재헌이 개인 목표를 완료했어요',
-    description: '운동 10분',
-    meta: '오늘',
-    emoji: '🔥',
-    sortKey: '9999-12-31T10:00:00',
-  },
-  {
-    id: 'demo-feed-2',
-    title: '재헌이 찌르기를 보냈어요',
-    description: '오늘 공부 30분 아직 안 했지?',
-    meta: '오늘',
-    emoji: '👀',
-    sortKey: '9999-12-31T09:00:00',
-  },
-];
 
 export default function Feed() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -54,6 +33,8 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     const loadFeed = async () => {
       const {
         data: { user },
@@ -66,17 +47,20 @@ export default function Feed() {
 
       try {
         const ensuredProfile = await ensureProfile(user);
+
+        if (!active) {
+          return;
+        }
+
         setProfile(ensuredProfile);
 
-        let connectedFriend: ProfileRow | null = null;
+        const connectedFriend = await fetchProfile(ensuredProfile.friend_id);
 
-        try {
-          connectedFriend = await fetchProfile(ensuredProfile.friend_id);
-          setFriendProfile(connectedFriend);
-        } catch (friendError) {
-          console.warn('Feed optional friend load failed:', friendError);
-          setFriendProfile(null);
+        if (!active) {
+          return;
         }
+
+        setFriendProfile(connectedFriend);
 
         if (!connectedFriend) {
           setLoading(false);
@@ -137,27 +121,39 @@ export default function Feed() {
               throw sharedCheckinsError;
             }
 
-            setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
+            if (active) {
+              setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
+            }
           } catch (sharedCheckinsError) {
             console.warn('Feed optional shared goal checkins load failed:', sharedCheckinsError);
-            setSharedGoalCheckins([]);
+            if (active) {
+              setSharedGoalCheckins([]);
+            }
           }
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : '피드 정보를 불러오지 못했어요.');
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : '피드 정보를 불러오지 못했어요.');
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     loadFeed();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const displayFriend = useMemo(() => getDisplayFriendProfile(friendProfile), [friendProfile]);
+  const friendName = friendProfile?.nickname || '친구';
 
   const feedItems = useMemo<FeedItem[]>(() => {
     if (!friendProfile) {
-      return demoFeedItems;
+      return [];
     }
 
     const routineMap = new Map(friendRoutines.map((routine) => [routine.id, routine.title]));
@@ -165,10 +161,10 @@ export default function Feed() {
 
     const personalItems = friendCheckins.map((checkin) => ({
       id: `routine-${checkin.routine_id}-${checkin.check_date}`,
-      title: `${displayFriend.nickname || '친구'}가 개인 목표를 완료했어요`,
+      title: `${friendName}가 개인 목표를 완료했어요`,
       description: routineMap.get(checkin.routine_id) || '개인 루틴 완료',
       meta: checkin.check_date,
-      emoji: '✅',
+      emoji: '✓',
       sortKey: `${checkin.check_date}T12:00:00`,
     }));
 
@@ -177,28 +173,24 @@ export default function Feed() {
       title:
         checkin.user_id === profile?.id
           ? '내가 공동 목표를 체크했어요'
-          : `${displayFriend.nickname || '친구'}가 공동 목표를 체크했어요`,
+          : `${friendName}가 공동 목표를 체크했어요`,
       description: goalMap.get(checkin.goal_id) || '공동 목표 진행',
       meta: checkin.check_date,
-      emoji: '🤝',
+      emoji: '🏁',
       sortKey: `${checkin.check_date}T13:00:00`,
     }));
 
     const nudgeItems = nudges.map((nudge) => ({
       id: nudge.id,
-      title: nudge.sender_id === profile?.id ? '내가 친구를 찔렀어요' : '친구가 나를 찔렀어요',
+      title: nudge.sender_id === profile?.id ? '내가 친구를 찔렀어요' : `${friendName}가 나를 찔렀어요`,
       description: nudge.message,
-      meta: new Date(nudge.created_at).toLocaleDateString(),
-      emoji: '👀',
+      meta: new Date(nudge.created_at).toLocaleDateString('ko-KR'),
+      emoji: '!',
       sortKey: nudge.created_at,
     }));
 
-    const allItems = [...personalItems, ...sharedItems, ...nudgeItems].sort((a, b) =>
-      b.sortKey.localeCompare(a.sortKey)
-    );
-
-    return allItems.length > 0 ? allItems : demoFeedItems;
-  }, [displayFriend.nickname, friendCheckins, friendProfile, friendRoutines, nudges, profile?.id, sharedGoalCheckins, sharedGoals]);
+    return [...personalItems, ...sharedItems, ...nudgeItems].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  }, [friendCheckins, friendName, friendProfile, friendRoutines, nudges, profile?.id, sharedGoalCheckins, sharedGoals]);
 
   if (loading) {
     return (
@@ -214,24 +206,36 @@ export default function Feed() {
         <header className="subpage-header">
           <p className="section-eyebrow">Feed</p>
           <h1>최근 활동 피드</h1>
-          <p>친구의 완료 기록, 찌르기, 공동 목표 진행 상황을 한 번에 볼 수 있어요.</p>
+          <p>데모 데이터 없이 실제 친구와 주고받은 활동만 보여줘요.</p>
         </header>
 
         <main className="subpage-content">
           {error && <p className="error home-error">{error}</p>}
 
-          <div className="feed-list">
-            {feedItems.map((item) => (
-              <article key={item.id} className="feed-card">
-                <div className="feed-avatar">{item.emoji}</div>
-                <div className="feed-copy">
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                </div>
-                <span className="feed-time">{item.meta}</span>
-              </article>
-            ))}
-          </div>
+          {!friendProfile ? (
+            <article className="empty-state-card">
+              <h3>연결된 친구가 아직 없어요</h3>
+              <p>친구를 연결하면 완료 기록, 찌르기, 공동 목표 진행 상황이 여기에 표시돼요.</p>
+            </article>
+          ) : feedItems.length === 0 ? (
+            <article className="empty-state-card">
+              <h3>아직 표시할 활동이 없어요</h3>
+              <p>{friendName}와 활동을 시작하면 실제 기록이 피드에 쌓여요.</p>
+            </article>
+          ) : (
+            <div className="feed-list">
+              {feedItems.map((item) => (
+                <article key={item.id} className="feed-card">
+                  <div className="feed-avatar">{item.emoji}</div>
+                  <div className="feed-copy">
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                  </div>
+                  <span className="feed-time">{item.meta}</span>
+                </article>
+              ))}
+            </div>
+          )}
         </main>
 
         <BottomTabBar />
