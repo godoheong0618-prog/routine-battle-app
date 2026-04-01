@@ -1,7 +1,6 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ensureProfile } from '../lib/mvp';
-import { supabase } from '../supabaseClient';
+import { hasSeenOnboarding, markOnboardingSeen, resolvePostAuthPath } from '../lib/appFlow';
 
 type OnboardingStep = {
   stepLabel: string;
@@ -16,122 +15,94 @@ type OnboardingStep = {
 const steps: OnboardingStep[] = [
   {
     stepLabel: 'Step 1 / 3',
-    title: '혼자 하는 루틴은 끝',
-    subtitle: '친구랑 같이 해야 오래 간다',
+    title: '혼자 하는 루틴도 배틀처럼',
+    subtitle: '친구와 함께하면 하루 루틴이 더 오래 이어져요.',
     hero: (
       <div className="onboarding-fire">
         <span>🔥</span>
       </div>
     ),
-    focusTitle: '혼자 하면 금방 포기',
-    focusSubtitle: '같이 하면 경쟁이 생김',
+    focusTitle: '오늘 해야 할 일을 한눈에 확인',
+    focusSubtitle: '작은 체크가 쌓일수록 루틴이 더 단단해져요.',
     buttonText: '다음',
   },
   {
     stepLabel: 'Step 2 / 3',
-    title: '같이 하면 경쟁된다',
-    subtitle: '누가 더 했는지 바로 보인다',
+    title: '같이 하면 경쟁이 생겨요',
+    subtitle: '내 진행률과 친구 진행률을 바로 비교할 수 있어요.',
     hero: (
       <div className="onboarding-vs">
         <div className="onboarding-vs-card onboarding-vs-card-active">나</div>
         <div className="onboarding-vs-card">친구</div>
       </div>
     ),
-    focusTitle: '실시간으로 바로 비교',
-    focusSubtitle: '누가 더 했는지 바로 보임',
+    focusTitle: '배틀처럼 보이는 일상 루틴',
+    focusSubtitle: '누가 먼저 끝냈는지, 얼마나 앞서는지 바로 보여줘요.',
     buttonText: '다음',
   },
   {
     stepLabel: 'Step 3 / 3',
-    title: '지고 싶지 않게 만든다',
-    subtitle: '벌칙 + 랭킹 + 압박',
+    title: '보상과 긴장감으로 끝까지',
+    subtitle: '벌칙, 점수, 공동 목표로 루틴을 더 재미있게 만들어요.',
     hero: (
       <div className="onboarding-penalty">
-        <p>이번 주 벌칙</p>
-        <strong>진 사람은 음료 사기 ☕</strong>
+        <p>이번 주 배틀</p>
+        <strong>진 사람은 커피 사기</strong>
       </div>
     ),
-    focusTitle: '게임처럼 계속 하게 됨',
-    focusSubtitle: '랭킹이랑 벌칙으로 동기 부여',
+    focusTitle: '루틴 앱이 아니라 같이 하는 게임처럼',
+    focusSubtitle: '친구와 주고받는 긴장감이 꾸준함을 만들어줘요.',
     buttonText: '시작하기',
   },
 ];
 
 export default function Onboarding() {
   const [stepIndex, setStepIndex] = useState(0);
-  const [nickname, setNickname] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    let active = true;
 
-      if (!user) {
-        navigate('/login');
+    const redirectIfCompleted = async () => {
+      if (!hasSeenOnboarding()) {
+        return;
       }
+
+      const nextPath = await resolvePostAuthPath();
+
+      if (!active) {
+        return;
+      }
+
+      navigate(nextPath, { replace: true });
     };
 
-    checkUser();
+    redirectIfCompleted();
+
+    return () => {
+      active = false;
+    };
   }, [navigate]);
 
   const currentStep = useMemo(() => steps[stepIndex], [stepIndex]);
 
-  const handleNext = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError('');
-
+  const handleNext = async () => {
     if (stepIndex < steps.length - 1) {
       setStepIndex((current) => current + 1);
       return;
     }
 
-    if (!nickname.trim()) {
-      setError('닉네임을 입력해주세요.');
-      return;
-    }
-
     setLoading(true);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setError(userError?.message || '로그인이 필요합니다.');
-      setLoading(false);
-      navigate('/login');
-      return;
-    }
-
-    try {
-      await ensureProfile(user);
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ nickname: nickname.trim() })
-        .eq('id', user.id);
-
-      if (updateError) {
-        setError(updateError.message);
-        setLoading(false);
-        return;
-      }
-
-      navigate('/home');
-    } catch (profileError) {
-      setError(profileError instanceof Error ? profileError.message : '프로필 저장에 실패했어요.');
-      setLoading(false);
-    }
+    markOnboardingSeen();
+    const nextPath = await resolvePostAuthPath();
+    navigate(nextPath, { replace: true });
   };
 
   return (
     <div className="mobile-shell">
       <div className="app-screen onboarding-screen">
-        <form className="onboarding-card" onSubmit={handleNext}>
+        <div className="onboarding-card">
           <div className="onboarding-content">
             <p className="onboarding-step">{currentStep.stepLabel}</p>
             <h1 className="onboarding-title">{currentStep.title}</h1>
@@ -143,24 +114,6 @@ export default function Onboarding() {
               <h2>{currentStep.focusTitle}</h2>
               <p>{currentStep.focusSubtitle}</p>
             </div>
-
-            {stepIndex === steps.length - 1 && (
-              <div className="onboarding-nickname-wrap">
-                <label className="onboarding-label" htmlFor="nickname">
-                  닉네임
-                </label>
-                <input
-                  id="nickname"
-                  className="onboarding-nickname-input"
-                  type="text"
-                  placeholder="배틀에서 사용할 닉네임"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                />
-              </div>
-            )}
-
-            {error && <p className="error onboarding-error">{error}</p>}
           </div>
 
           <div className="onboarding-footer">
@@ -172,11 +125,11 @@ export default function Onboarding() {
                 />
               ))}
             </div>
-            <button className="primary-button onboarding-button" type="submit" disabled={loading}>
-              {loading ? '저장 중...' : currentStep.buttonText}
+            <button className="primary-button onboarding-button" type="button" disabled={loading} onClick={handleNext}>
+              {loading ? '이동 중...' : currentStep.buttonText}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

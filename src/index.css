@@ -87,6 +87,50 @@ h3 {
   color: #6a6a6a;
 }
 
+.splash-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.5), transparent 42%),
+    #ececeb;
+}
+
+.splash-card {
+  width: 100%;
+  min-height: 72vh;
+  border-radius: 34px;
+  padding: 32px 24px;
+  background: #171717;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.splash-card h1 {
+  margin-top: 12px;
+  font-size: 30px;
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.splash-card p {
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.splash-kicker {
+  margin-top: 0;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.54);
+}
+
 .hero-card,
 .section-block,
 .form-card,
@@ -671,6 +715,46 @@ h3 {
   background: #ececeb;
 }
 
+.auth-screen,
+.display-name-screen {
+  display: flex;
+  align-items: center;
+  padding: 24px 18px;
+  background: #ececeb;
+}
+
+.auth-container {
+  width: 100%;
+  min-height: auto;
+  padding: 0;
+}
+
+.auth-copy {
+  padding: 0 4px;
+}
+
+.auth-copy > h1 {
+  margin-top: 10px;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.auth-copy > p:last-child {
+  margin-top: 8px;
+  font-size: 15px;
+  color: #7b7b7b;
+  line-height: 1.5;
+}
+
+.auth-link {
+  display: block;
+  font-size: 14px;
+  color: #8a7e72;
+  text-align: center;
+}
+
 .onboarding-card {
   width: 100%;
   min-height: 82vh;
@@ -821,6 +905,22 @@ h3 {
 .onboarding-button {
   width: 100%;
   margin-top: 16px;
+}
+
+.display-name-content {
+  width: 100%;
+}
+
+.display-name-copy {
+  padding: 0 8px;
+}
+
+.display-name-card {
+  margin-top: 18px;
+}
+
+.display-name-card .primary-button {
+  width: 100%;
 }
 
 .onboarding-error,
@@ -1121,6 +1221,12 @@ h3 {
   }
 
   .onboarding-screen {
+    padding: 18px;
+  }
+
+  .splash-screen,
+  .auth-screen,
+  .display-name-screen {
     padding: 18px;
   }
 

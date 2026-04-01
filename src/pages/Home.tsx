@@ -107,7 +107,7 @@ export default function Home() {
         console.warn('Home optional profile load failed:', error);
         setProfile({
           id: user.id,
-          nickname: user.email?.split('@')[0] ?? '루틴러',
+          nickname: null,
           friend_code: null,
           friend_id: null,
         });

@@ -241,7 +241,7 @@ export async function ensureProfile(user: Pick<User, 'id' | 'email'>) {
     .from('profiles')
     .insert({
       id: user.id,
-      nickname: user.email?.split('@')[0] ?? '루틴러',
+      nickname: null,
       friend_code: generateFriendCode(user.id),
       friend_id: null,
     })

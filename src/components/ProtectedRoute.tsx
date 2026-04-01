@@ -1,20 +1,27 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { hasDisplayName, hasSeenOnboarding } from '../lib/appFlow';
+import { ensureProfile } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+type AccessStatus = 'loading' | 'authorized' | 'needs_onboarding' | 'needs_profile' | 'unauthenticated';
 
 type ProtectedRouteProps = {
   children: ReactNode;
 };
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [status, setStatus] = useState<AccessStatus>('loading');
 
   useEffect(() => {
     let active = true;
 
-    const checkUser = async () => {
+    const checkAccess = async () => {
+      if (!hasSeenOnboarding()) {
+        setStatus('needs_onboarding');
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -23,10 +30,29 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      setStatus(user ? 'authenticated' : 'unauthenticated');
+      if (!user) {
+        setStatus('unauthenticated');
+        return;
+      }
+
+      try {
+        const profile = await ensureProfile(user);
+
+        if (!active) {
+          return;
+        }
+
+        setStatus(hasDisplayName(profile.nickname) ? 'authorized' : 'needs_profile');
+      } catch (profileError) {
+        console.warn('Protected route profile check failed:', profileError);
+
+        if (active) {
+          setStatus('authorized');
+        }
+      }
     };
 
-    checkUser();
+    checkAccess();
 
     return () => {
       active = false;
@@ -41,8 +67,16 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
+  if (status === 'needs_onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+
   if (status === 'unauthenticated') {
     return <Navigate to="/login" replace />;
+  }
+
+  if (status === 'needs_profile') {
+    return <Navigate to="/display-name" replace />;
   }
 
   return <>{children}</>;
