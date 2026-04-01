@@ -211,14 +211,16 @@ export default function Home() {
 
   const completedRoutineIds = useMemo(() => {
     return new Set(
-      myCheckins.filter((checkin) => checkin.check_date === todayKey).map((checkin) => checkin.routine_id)
+      myCheckins
+        .filter((checkin) => checkin.check_date === todayKey)
+        .map((checkin) => String(checkin.routine_id))
     );
   }, [myCheckins, todayKey]);
 
   const personalGoals = useMemo<PersonalGoalView[]>(() => {
     return todayRoutines.map((routine) => ({
       ...routine,
-      completed: completedRoutineIds.has(routine.id),
+      completed: completedRoutineIds.has(String(routine.id)),
       meta: routine.description || `${formatRoutineSchedule(routine)} · ${routine.target_count ?? 1}회 목표`,
     }));
   }, [completedRoutineIds, todayRoutines]);
@@ -283,10 +285,12 @@ export default function Home() {
       return;
     }
 
+    const routineKey = String(routineId);
+
     setPendingAction(`routine-${routineId}`);
     setNotice('');
 
-    if (completedRoutineIds.has(routineId)) {
+    if (completedRoutineIds.has(routineKey)) {
       const { error } = await supabase
         .from('checkins')
         .delete()
@@ -304,7 +308,11 @@ export default function Home() {
       setCheckins((current) =>
         current.filter(
           (checkin) =>
-            !(checkin.user_id === userId && checkin.routine_id === routineId && checkin.check_date === todayKey)
+            !(
+              checkin.user_id === userId &&
+              String(checkin.routine_id) === routineKey &&
+              checkin.check_date === todayKey
+            )
         )
       );
       setPendingAction('');
@@ -317,16 +325,35 @@ export default function Home() {
       check_date: todayKey,
     };
 
-    const { error } = await supabase.from('checkins').insert(payload);
+    let saveError =
+      (
+        await supabase.from('checkins').upsert(payload, {
+          onConflict: 'user_id,routine_id,check_date',
+          ignoreDuplicates: false,
+        })
+      ).error ?? null;
 
-    if (error) {
-      console.warn('Routine checkin insert failed:', error);
+    if (saveError?.code === '42P10') {
+      saveError = (await supabase.from('checkins').insert(payload)).error ?? null;
+    }
+
+    if (saveError && saveError.code !== '23505') {
+      console.warn('Routine checkin insert failed:', saveError);
       setNotice('완료 상태를 저장하지 못했어요.');
       setPendingAction('');
       return;
     }
 
-    setCheckins((current) => [...current, payload]);
+    setCheckins((current) => {
+      const alreadyExists = current.some(
+        (checkin) =>
+          checkin.user_id === userId &&
+          String(checkin.routine_id) === routineKey &&
+          checkin.check_date === todayKey
+      );
+
+      return alreadyExists ? current : [...current, payload];
+    });
     setPendingAction('');
   };
 
@@ -370,7 +397,7 @@ export default function Home() {
 
     setRoutines((current) => current.filter((routine) => routine.id !== routineId));
     setCheckins((current) =>
-      current.filter((checkin) => !(checkin.user_id === userId && checkin.routine_id === routineId))
+      current.filter((checkin) => !(checkin.user_id === userId && String(checkin.routine_id) === String(routineId)))
     );
     setNotice('루틴을 삭제했어요.');
     setPendingAction('');
