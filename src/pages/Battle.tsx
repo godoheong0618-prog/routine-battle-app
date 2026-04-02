@@ -70,7 +70,7 @@ export default function Battle() {
         const relatedUserIds = connectedFriend ? [user.id, connectedFriend.id] : [user.id];
 
         const [checkinsResult, sharedGoalsResult] = await Promise.allSettled([
-          supabase.from('checkins').select('user_id, routine_id, check_date').in('user_id', relatedUserIds),
+          supabase.from('checkins').select('user_id, routine_id, check_in_date').in('user_id', relatedUserIds),
           supabase.from('shared_goals').select('*').or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
         ]);
 

@@ -26,7 +26,7 @@ export type RoutineRow = {
 export type CheckinRow = {
   user_id: string;
   routine_id: string;
-  check_date: string;
+  check_in_date: string;
 };
 
 export type SharedGoalRow = {
@@ -78,6 +78,15 @@ export function getTodayKey() {
   return getDateKey(new Date());
 }
 
+type DatedCheckin = {
+  check_in_date?: string | null;
+  check_date?: string | null;
+};
+
+export function getCheckinDateValue(checkin: DatedCheckin) {
+  return checkin.check_in_date ?? checkin.check_date ?? '';
+}
+
 export function getTodayDayKey(date = new Date()): RoutineDayKey {
   const day = date.getDay();
   const keys: RoutineDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -98,8 +107,10 @@ export function getWeekEndKey(date = new Date()) {
   return getDateKey(end);
 }
 
-export function calculateStreak(checkins: Array<{ check_date: string }>) {
-  const uniqueDates = new Set(checkins.map((checkin) => checkin.check_date));
+export function calculateStreak(checkins: DatedCheckin[]) {
+  const uniqueDates = new Set(
+    checkins.map((checkin) => getCheckinDateValue(checkin)).filter(Boolean)
+  );
   const cursor = new Date();
   let streak = 0;
 
@@ -388,7 +399,10 @@ export function calculateBattleScores({
   const pointsByGoal = new Map(sharedGoals.map((goal) => [goal.id, goal.points ?? 3]));
 
   const weekPersonal = checkins.filter(
-    (checkin) => checkin.check_date >= weekStart && checkin.check_date <= weekEnd
+    (checkin) => {
+      const checkinDate = getCheckinDateValue(checkin);
+      return checkinDate >= weekStart && checkinDate <= weekEnd;
+    }
   );
   const weekShared = sharedGoalCheckins.filter(
     (checkin) => checkin.check_date >= weekStart && checkin.check_date <= weekEnd

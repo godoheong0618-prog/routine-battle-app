@@ -5,7 +5,7 @@ import { ProfileRow, SharedGoalCheckinRow, calculateStreak, ensureProfile } from
 import { supabase } from '../supabaseClient';
 
 type CheckinSummary = {
-  check_date: string;
+  check_in_date: string;
 };
 
 export default function MyPage() {
@@ -34,7 +34,7 @@ export default function MyPage() {
 
         const [routineResult, checkinsResult, sharedResult] = await Promise.allSettled([
           supabase.from('routines').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('checkins').select('check_date').eq('user_id', user.id),
+          supabase.from('checkins').select('check_in_date').eq('user_id', user.id),
           supabase.from('shared_goal_checkins').select('goal_id, user_id, check_date').eq('user_id', user.id),
         ]);
 

@@ -69,7 +69,7 @@ export default function Feed() {
 
         const [routinesResult, checkinsResult, sharedGoalsResult, nudgesResult] = await Promise.allSettled([
           supabase.from('routines').select('*').eq('user_id', connectedFriend.id),
-          supabase.from('checkins').select('user_id, routine_id, check_date').eq('user_id', connectedFriend.id),
+          supabase.from('checkins').select('user_id, routine_id, check_in_date').eq('user_id', connectedFriend.id),
           supabase.from('shared_goals').select('*').or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
           supabase
             .from('nudges')
@@ -160,12 +160,12 @@ export default function Feed() {
     const goalMap = new Map(sharedGoals.map((goal) => [goal.id, goal.title]));
 
     const personalItems = friendCheckins.map((checkin) => ({
-      id: `routine-${checkin.routine_id}-${checkin.check_date}`,
+      id: `routine-${checkin.routine_id}-${checkin.check_in_date}`,
       title: `${friendName}가 개인 목표를 완료했어요`,
       description: routineMap.get(checkin.routine_id) || '개인 루틴 완료',
-      meta: checkin.check_date,
+      meta: checkin.check_in_date,
       emoji: '✓',
-      sortKey: `${checkin.check_date}T12:00:00`,
+      sortKey: `${checkin.check_in_date}T12:00:00`,
     }));
 
     const sharedItems = sharedGoalCheckins.map((checkin) => ({
