@@ -1207,6 +1207,326 @@ h3 {
   justify-content: center;
 }
 
+.home-loading-shell {
+  padding: 24px 18px 120px;
+  display: grid;
+  gap: 16px;
+}
+
+.home-skeleton {
+  border-radius: 24px;
+  background: linear-gradient(90deg, #f0f0ee 0%, #e4e4e1 50%, #f0f0ee 100%);
+  background-size: 200% 100%;
+  animation: home-skeleton-pulse 1.4s ease infinite;
+}
+
+.home-skeleton-hero {
+  min-height: 188px;
+}
+
+.home-skeleton-card {
+  min-height: 156px;
+}
+
+.home-summary-card {
+  padding-bottom: 18px;
+}
+
+.home-profile-shortcut {
+  color: #171717;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.summary-chip-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.summary-chip {
+  padding: 14px 12px;
+  border-radius: 18px;
+  background: #f7f7f5;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+}
+
+.summary-chip span {
+  display: block;
+  font-size: 12px;
+  color: #7a6f64;
+}
+
+.summary-chip strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.section-header-stack {
+  align-items: flex-start;
+}
+
+.section-header-stack > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.section-description {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #7b7b7b;
+  line-height: 1.5;
+}
+
+.today-task-list,
+.battle-goal-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.home-task-card {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 16px 14px;
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  box-shadow: 0 2px 8px rgba(26, 26, 26, 0.04);
+}
+
+.home-task-card-completed {
+  background: #f2f2f0;
+  border-color: rgba(18, 18, 18, 0.14);
+}
+
+.home-task-main {
+  min-width: 0;
+}
+
+.home-task-actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-task-button {
+  min-width: 112px;
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.task-menu {
+  position: relative;
+}
+
+.task-menu summary {
+  list-style: none;
+}
+
+.task-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-menu-trigger {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #f1f1ef;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  display: grid;
+  place-items: center;
+  gap: 3px;
+}
+
+.task-menu-trigger span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #6f655c;
+}
+
+.task-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 120px;
+  padding: 8px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  display: grid;
+  gap: 6px;
+  z-index: 4;
+}
+
+.task-menu-item {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f6f6f5;
+  color: #171717;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.task-menu-item-danger {
+  color: #b42318;
+}
+
+.home-battle-overview {
+  margin-top: 14px;
+  padding: 18px 16px;
+  border-radius: 26px;
+  background: #171717;
+  color: #ffffff;
+  display: grid;
+  gap: 14px;
+}
+
+.home-battle-overview-leading {
+  background: linear-gradient(180deg, #171717 0%, #242424 100%);
+}
+
+.home-battle-overview-trailing {
+  background: linear-gradient(180deg, #171717 0%, #2d2323 100%);
+}
+
+.home-battle-overview-tied {
+  background: linear-gradient(180deg, #171717 0%, #272727 100%);
+}
+
+.home-battle-copy .battle-score {
+  max-width: none;
+}
+
+.home-battle-score-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.home-battle-score {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.home-battle-score span {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.home-battle-score strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.battle-goal-card {
+  padding: 16px;
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  box-shadow: 0 2px 8px rgba(26, 26, 26, 0.04);
+}
+
+.battle-goal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.battle-goal-status {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #5d5d5d;
+  line-height: 1.5;
+}
+
+.battle-goal-actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.battle-goal-button {
+  min-width: 118px;
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.battle-goal-nudge {
+  min-height: 40px;
+  padding: 0 6px;
+  color: #5f5750;
+  font-weight: 700;
+}
+
+.inline-action-link-light {
+  background: #f1f1ef;
+  color: #171717;
+}
+
+.fab-button-extended {
+  width: auto;
+  height: 54px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.home-toast {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 156px;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(18, 18, 18, 0.92);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.45;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+  z-index: 5;
+}
+
+@keyframes home-skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 @media (max-width: 420px) {
   .mobile-shell {
     padding: 0;
@@ -1237,5 +1557,31 @@ h3 {
   .battle-card,
   .battle-scoreboard {
     grid-template-columns: 1fr;
+  }
+
+  .summary-chip-row,
+  .home-battle-score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-task-actions,
+  .battle-goal-actions {
+    align-items: stretch;
+  }
+
+  .home-task-button,
+  .battle-goal-button {
+    width: 100%;
+  }
+
+  .fab-button-extended {
+    right: 16px;
+    bottom: 84px;
+  }
+
+  .home-toast {
+    left: 16px;
+    right: 16px;
+    bottom: 148px;
   }
 }

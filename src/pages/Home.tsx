@@ -26,7 +26,62 @@ type PersonalGoalView = RoutineRow & {
 type SharedGoalView = SharedGoalRow & {
   myDoneToday: boolean;
   friendDoneToday: boolean;
+  statusText: string;
 };
+
+type ToastState = {
+  id: number;
+  message: string;
+};
+
+function buildBattleCopy({
+  hasFriend,
+  friendName,
+  myName,
+  difference,
+  remainingActions,
+}: {
+  hasFriend: boolean;
+  friendName: string;
+  myName: string;
+  difference: number;
+  remainingActions: number;
+}) {
+  if (!hasFriend) {
+    return {
+      headline: '친구를 연결하고 배틀을 시작해 보세요',
+      detail: '이번 주 점수와 공동 목표는 친구를 연결하면 바로 보여요.',
+    };
+  }
+
+  if (difference === 0) {
+    return {
+      headline: '지금 동점이에요',
+      detail:
+        remainingActions > 0
+          ? '오늘 체크 하나가 승부를 가를 수 있어요.'
+          : '오늘 할 일은 모두 끝냈어요. 내일 다시 점수를 쌓아봐요.',
+    };
+  }
+
+  if (difference > 0) {
+    return {
+      headline: `${myName}이 ${difference}점 앞서고 있어요`,
+      detail:
+        remainingActions > 0
+          ? '지금 페이스 좋아요. 남은 체크만 마무리하면 돼요.'
+          : '오늘 할 일은 모두 끝냈어요. 이 흐름을 유지해 보세요.',
+    };
+  }
+
+  return {
+    headline: `${friendName}이 ${Math.abs(difference)}점 앞서고 있어요`,
+    detail:
+      remainingActions > 0
+        ? '오늘 하나만 더 하면 역전 가능해요.'
+        : '지금은 따라갈 체크가 없어요. 공동 목표를 다시 확인해 보세요.',
+  };
+}
 
 export default function Home() {
   const [userId, setUserId] = useState('');
@@ -36,14 +91,27 @@ export default function Home() {
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
   const [sharedGoals, setSharedGoals] = useState<SharedGoalRow[]>([]);
   const [sharedGoalCheckins, setSharedGoalCheckins] = useState<SharedGoalCheckinRow[]>([]);
-  const [routineError, setRoutineError] = useState('');
-  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState('');
+  const [toast, setToast] = useState<ToastState | null>(null);
   const navigate = useNavigate();
 
   const todayKey = useMemo(() => getTodayKey(), []);
   const todayDayKey = useMemo(() => getTodayDayKey(), []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 2600);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     let active = true;
@@ -60,10 +128,10 @@ export default function Home() {
       }
 
       setUserId(user.id);
-      setRoutineError('');
 
       let ensuredProfile: ProfileRow | null = null;
       let connectedFriend: ProfileRow | null = null;
+      let homeLoadMessage = '';
 
       try {
         ensuredProfile = await ensureProfile(user);
@@ -76,7 +144,8 @@ export default function Home() {
         setProfile(ensuredProfile);
         setFriendProfile(connectedFriend);
       } catch (loadError) {
-        console.warn('Home optional profile load failed:', loadError);
+        console.warn('Home profile load failed:', loadError);
+        homeLoadMessage = '홈 정보를 일부 불러오지 못했어요.';
 
         if (!active) {
           return;
@@ -103,10 +172,10 @@ export default function Home() {
         }
       } catch (loadError) {
         console.warn('Home routines load failed:', loadError);
+        homeLoadMessage = '오늘 할 일을 불러오지 못했어요.';
 
         if (active) {
           setRoutines([]);
-          setRoutineError('루틴을 불러오지 못했어요.');
         }
       }
 
@@ -122,7 +191,8 @@ export default function Home() {
         const { data, error } = checkinsResult.value;
 
         if (error) {
-          console.warn('Home optional checkins load failed:', error);
+          console.warn('Home checkins load failed:', error);
+          homeLoadMessage = '체크 기록을 최신 상태로 불러오지 못했어요.';
           if (active) {
             setCheckins([]);
           }
@@ -130,7 +200,8 @@ export default function Home() {
           setCheckins((data as CheckinRow[]) ?? []);
         }
       } else {
-        console.warn('Home optional checkins load failed:', checkinsResult.reason);
+        console.warn('Home checkins load failed:', checkinsResult.reason);
+        homeLoadMessage = '체크 기록을 최신 상태로 불러오지 못했어요.';
         if (active) {
           setCheckins([]);
         }
@@ -142,7 +213,8 @@ export default function Home() {
         const { data, error } = sharedGoalsResult.value;
 
         if (error) {
-          console.warn('Home optional shared goals load failed:', error);
+          console.warn('Home shared goals load failed:', error);
+          homeLoadMessage = homeLoadMessage || '배틀 정보를 일부 불러오지 못했어요.';
           if (active) {
             setSharedGoals([]);
           }
@@ -153,7 +225,8 @@ export default function Home() {
           }
         }
       } else {
-        console.warn('Home optional shared goals load failed:', sharedGoalsResult.reason);
+        console.warn('Home shared goals load failed:', sharedGoalsResult.reason);
+        homeLoadMessage = homeLoadMessage || '배틀 정보를 일부 불러오지 못했어요.';
         if (active) {
           setSharedGoals([]);
         }
@@ -176,7 +249,8 @@ export default function Home() {
             setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
           }
         } catch (loadError) {
-          console.warn('Home optional shared goal checkins load failed:', loadError);
+          console.warn('Home shared goal checkins load failed:', loadError);
+          homeLoadMessage = homeLoadMessage || '공동 목표 진행 상태를 불러오지 못했어요.';
           if (active) {
             setSharedGoalCheckins([]);
           }
@@ -186,6 +260,9 @@ export default function Home() {
       }
 
       if (active) {
+        if (homeLoadMessage) {
+          setToast({ id: Date.now(), message: homeLoadMessage });
+        }
         setLoading(false);
       }
     };
@@ -197,6 +274,7 @@ export default function Home() {
     };
   }, [navigate]);
 
+  const profileName = profile?.nickname || '나';
   const friendName = friendProfile?.nickname || '친구';
 
   const todayRoutines = useMemo(
@@ -225,31 +303,40 @@ export default function Home() {
     }));
   }, [completedRoutineIds, todayRoutines]);
 
-  const quickStarts = useMemo(() => {
-    return todayRoutines.slice(0, 4).map((routine) => ({
-      id: routine.id,
-      title: routine.title,
-    }));
-  }, [todayRoutines]);
-
   const sharedGoalViews = useMemo<SharedGoalView[]>(() => {
     if (!friendProfile) {
       return [];
     }
 
-    return sharedGoals.map((goal) => ({
-      ...goal,
-      myDoneToday: sharedGoalCheckins.some(
+    return sharedGoals.map((goal) => {
+      const myDoneToday = sharedGoalCheckins.some(
         (checkin) => checkin.goal_id === goal.id && checkin.user_id === userId && checkin.check_date === todayKey
-      ),
-      friendDoneToday: sharedGoalCheckins.some(
+      );
+      const friendDoneToday = sharedGoalCheckins.some(
         (checkin) =>
           checkin.goal_id === goal.id &&
           checkin.user_id === friendProfile.id &&
           checkin.check_date === todayKey
-      ),
-    }));
-  }, [friendProfile, sharedGoalCheckins, sharedGoals, todayKey, userId]);
+      );
+
+      let statusText = '둘 다 아직 시작 전이에요.';
+
+      if (myDoneToday && friendDoneToday) {
+        statusText = '둘 다 완료했어요.';
+      } else if (myDoneToday) {
+        statusText = `나는 완료했고 ${friendName}를 기다리는 중이에요.`;
+      } else if (friendDoneToday) {
+        statusText = `${friendName}는 완료했어요. 지금 따라가 보세요.`;
+      }
+
+      return {
+        ...goal,
+        myDoneToday,
+        friendDoneToday,
+        statusText,
+      };
+    });
+  }, [friendName, friendProfile, sharedGoalCheckins, sharedGoals, todayKey, userId]);
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -263,21 +350,24 @@ export default function Home() {
 
   const streak = useMemo(() => calculateStreak(myCheckins), [myCheckins]);
   const completedCount = personalGoals.filter((goal) => goal.completed).length;
-  const totalCount = todayRoutines.length;
-  const progress = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
-  const displayMyScore = battleSummary.myScore;
-  const displayFriendScore = friendProfile ? battleSummary.friendScore : 0;
-  const displayDifference = Math.abs(displayMyScore - displayFriendScore);
-  const battleLeader = friendProfile
-    ? displayMyScore === displayFriendScore
-      ? '지금은 동점이에요'
-      : displayMyScore > displayFriendScore
-        ? `${profile?.nickname || '내가'}가 앞서고 있어요`
-        : `${friendName}가 앞서고 있어요`
-    : '친구를 연결하면 주간 배틀이 시작돼요';
-  const battleScoreText = friendProfile
-    ? `나 ${displayMyScore}점 · ${friendName} ${displayFriendScore}점 · ${displayDifference}점 차이`
-    : '친구를 연결하면 실제 점수 비교가 시작돼요.';
+  const remainingCount = Math.max(personalGoals.length - completedCount, 0);
+  const progress = personalGoals.length === 0 ? 0 : Math.round((completedCount / personalGoals.length) * 100);
+  const remainingBattleActions =
+    personalGoals.filter((goal) => !goal.completed).length + sharedGoalViews.filter((goal) => !goal.myDoneToday).length;
+  const battleCopy = buildBattleCopy({
+    hasFriend: Boolean(friendProfile),
+    friendName,
+    myName: profileName,
+    difference: battleSummary.difference,
+    remainingActions: remainingBattleActions,
+  });
+  const sharedGoalPreview = sharedGoalViews.slice(0, 2);
+  const battleDifferenceText =
+    !friendProfile || battleSummary.difference === 0 ? '동점' : `${Math.abs(battleSummary.difference)}점 차`;
+
+  const showToast = (message: string) => {
+    setToast({ id: Date.now(), message });
+  };
 
   const handleToggleRoutine = async (routineId: string) => {
     if (!userId) {
@@ -286,74 +376,76 @@ export default function Home() {
     }
 
     const routineKey = String(routineId);
+    const actionKey = `routine-${routineId}`;
+    const alreadyCompleted = completedRoutineIds.has(routineKey);
+    const optimisticCheckin = {
+      user_id: userId,
+      routine_id: routineId,
+      check_date: todayKey,
+    };
+    const previousCheckins = checkins;
 
-    setPendingAction(`routine-${routineId}`);
-    setNotice('');
-
-    if (completedRoutineIds.has(routineKey)) {
-      const { error } = await supabase
-        .from('checkins')
-        .delete()
-        .eq('user_id', userId)
-        .eq('routine_id', routineId)
-        .eq('check_date', todayKey);
-
-      if (error) {
-        console.warn('Routine checkin delete failed:', error);
-        setNotice('완료 상태를 바꾸지 못했어요.');
-        setPendingAction('');
-        return;
-      }
-
-      setCheckins((current) =>
-        current.filter(
+    setPendingAction(actionKey);
+    setCheckins((current) => {
+      if (alreadyCompleted) {
+        return current.filter(
           (checkin) =>
             !(
               checkin.user_id === userId &&
               String(checkin.routine_id) === routineKey &&
               checkin.check_date === todayKey
             )
-        )
-      );
-      setPendingAction('');
-      return;
-    }
+        );
+      }
 
-    const payload = {
-      user_id: userId,
-      routine_id: routineId,
-      check_date: todayKey,
-    };
-
-    let saveError =
-      (
-        await supabase.from('checkins').upsert(payload, {
-          onConflict: 'user_id,routine_id,check_date',
-          ignoreDuplicates: false,
-        })
-      ).error ?? null;
-
-    if (saveError?.code === '42P10') {
-      saveError = (await supabase.from('checkins').insert(payload)).error ?? null;
-    }
-
-    if (saveError && saveError.code !== '23505') {
-      console.warn('Routine checkin insert failed:', saveError);
-      setNotice('완료 상태를 저장하지 못했어요.');
-      setPendingAction('');
-      return;
-    }
-
-    setCheckins((current) => {
-      const alreadyExists = current.some(
+      const exists = current.some(
         (checkin) =>
           checkin.user_id === userId &&
           String(checkin.routine_id) === routineKey &&
           checkin.check_date === todayKey
       );
 
-      return alreadyExists ? current : [...current, payload];
+      return exists ? current : [...current, optimisticCheckin];
     });
+
+    let saveError = null;
+
+    if (alreadyCompleted) {
+      saveError =
+        (
+          await supabase
+            .from('checkins')
+            .delete()
+            .eq('user_id', userId)
+            .eq('routine_id', routineId)
+            .eq('check_date', todayKey)
+        ).error ?? null;
+    } else {
+      saveError =
+        (
+          await supabase.from('checkins').upsert(optimisticCheckin, {
+            onConflict: 'user_id,routine_id,check_date',
+            ignoreDuplicates: false,
+          })
+        ).error ?? null;
+
+      if (saveError?.code === '42P10') {
+        saveError = (await supabase.from('checkins').insert(optimisticCheckin)).error ?? null;
+      }
+
+      if (saveError?.code === '23505') {
+        saveError = null;
+      }
+    }
+
+    if (saveError) {
+      console.warn('Routine checkin save failed:', saveError);
+      setCheckins(previousCheckins);
+      showToast('저장에 실패했어요. 다시 시도해 주세요.');
+      setPendingAction('');
+      return;
+    }
+
     setPendingAction('');
   };
 
@@ -370,7 +462,6 @@ export default function Home() {
     }
 
     setPendingAction(`delete-${routineId}`);
-    setNotice('');
 
     const { error: checkinDeleteError } = await supabase
       .from('checkins')
@@ -390,7 +481,7 @@ export default function Home() {
 
     if (routineDeleteError) {
       console.warn('Routine delete failed:', routineDeleteError);
-      setNotice('루틴을 삭제하지 못했어요.');
+      showToast('루틴을 삭제하지 못했어요.');
       setPendingAction('');
       return;
     }
@@ -399,80 +490,76 @@ export default function Home() {
     setCheckins((current) =>
       current.filter((checkin) => !(checkin.user_id === userId && String(checkin.routine_id) === String(routineId)))
     );
-    setNotice('루틴을 삭제했어요.');
+    showToast('루틴을 삭제했어요.');
     setPendingAction('');
   };
 
   const handleToggleSharedGoal = async (goalId: string) => {
-    if (!userId) {
-      navigate('/login');
+    if (!userId || !friendProfile) {
+      showToast('친구를 먼저 연결해 주세요.');
       return;
     }
 
-    if (!friendProfile) {
-      setNotice('친구를 연결한 뒤 공동 목표를 체크할 수 있어요.');
-      return;
-    }
-
-    setPendingAction(`shared-${goalId}`);
-    setNotice('');
-
+    const actionKey = `shared-${goalId}`;
     const alreadyDone = sharedGoalCheckins.some(
       (checkin) => checkin.goal_id === goalId && checkin.user_id === userId && checkin.check_date === todayKey
     );
-
-    if (alreadyDone) {
-      const { error } = await supabase
-        .from('shared_goal_checkins')
-        .delete()
-        .eq('goal_id', goalId)
-        .eq('user_id', userId)
-        .eq('check_date', todayKey);
-
-      if (error) {
-        console.warn('Shared goal checkin delete failed:', error);
-        setNotice('공동 목표 상태를 바꾸지 못했어요.');
-        setPendingAction('');
-        return;
-      }
-
-      setSharedGoalCheckins((current) =>
-        current.filter(
-          (checkin) =>
-            !(checkin.goal_id === goalId && checkin.user_id === userId && checkin.check_date === todayKey)
-        )
-      );
-      setPendingAction('');
-      return;
-    }
-
-    const payload = {
+    const optimisticCheckin = {
       goal_id: goalId,
       user_id: userId,
       check_date: todayKey,
     };
+    const previousCheckins = sharedGoalCheckins;
 
-    const { error } = await supabase.from('shared_goal_checkins').insert(payload);
+    setPendingAction(actionKey);
+    setSharedGoalCheckins((current) => {
+      if (alreadyDone) {
+        return current.filter(
+          (checkin) => !(checkin.goal_id === goalId && checkin.user_id === userId && checkin.check_date === todayKey)
+        );
+      }
 
-    if (error) {
-      console.warn('Shared goal checkin insert failed:', error);
-      setNotice('공동 목표 상태를 저장하지 못했어요.');
+      const exists = current.some(
+        (checkin) => checkin.goal_id === goalId && checkin.user_id === userId && checkin.check_date === todayKey
+      );
+
+      return exists ? current : [...current, optimisticCheckin];
+    });
+
+    let saveError = null;
+
+    if (alreadyDone) {
+      saveError =
+        (
+          await supabase
+            .from('shared_goal_checkins')
+            .delete()
+            .eq('goal_id', goalId)
+            .eq('user_id', userId)
+            .eq('check_date', todayKey)
+        ).error ?? null;
+    } else {
+      saveError = (await supabase.from('shared_goal_checkins').insert(optimisticCheckin)).error ?? null;
+
+      if (saveError?.code === '23505') {
+        saveError = null;
+      }
+    }
+
+    if (saveError) {
+      console.warn('Shared goal checkin save failed:', saveError);
+      setSharedGoalCheckins(previousCheckins);
+      showToast('공동 목표 상태를 저장하지 못했어요.');
       setPendingAction('');
       return;
     }
 
-    setSharedGoalCheckins((current) => [...current, payload]);
     setPendingAction('');
   };
 
   const handleSendNudge = async (goalTitle?: string) => {
-    if (!userId) {
-      navigate('/login');
-      return;
-    }
-
-    if (!friendProfile) {
-      setNotice('친구를 먼저 연결해 주세요.');
+    if (!userId || !friendProfile) {
+      showToast('친구를 먼저 연결해 주세요.');
       return;
     }
 
@@ -484,17 +571,23 @@ export default function Home() {
 
     if (error) {
       console.warn('Nudge insert failed:', error);
-      setNotice('찌르기를 보내지 못했어요.');
+      showToast('찌르기를 보내지 못했어요.');
       return;
     }
 
-    setNotice(`${friendName}에게 찌르기를 보냈어요.`);
+    showToast(`${friendName}에게 찌르기를 보냈어요.`);
   };
 
   if (loading) {
     return (
       <div className="mobile-shell">
-        <div className="app-screen loading-screen">불러오는 중...</div>
+        <div className="app-screen home-screen">
+          <div className="home-loading-shell">
+            <div className="home-skeleton home-skeleton-hero" />
+            <div className="home-skeleton home-skeleton-card" />
+            <div className="home-skeleton home-skeleton-card" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -502,117 +595,130 @@ export default function Home() {
   return (
     <div className="mobile-shell">
       <div className="app-screen home-screen">
-        <header className="home-top-card">
+        <header className="home-top-card home-summary-card">
           <div className="hero-top-row">
             <div>
-              <p className="section-eyebrow">오늘의 루틴</p>
-              <h1 className="home-streak-title">🔥 {streak}일 연속</h1>
+              <p className="section-eyebrow">오늘 진행 상황</p>
+              <h1 className="home-streak-title">
+                오늘 {completedCount} / {personalGoals.length} 완료
+              </h1>
               <p className="hero-subtitle">
-                오늘 {completedCount} / {totalCount} 완료
+                {personalGoals.length === 0
+                  ? '오늘 체크할 루틴이 없어요. 새 루틴을 추가해 보세요.'
+                  : `진행률 ${progress}% · ${streak}일 연속`}
               </p>
             </div>
-            <button className="home-bell-button" type="button" aria-label="알림">
-              •
-            </button>
+
+            <Link className="home-bell-button home-profile-shortcut" to="/mypage" aria-label="마이페이지">
+              {profile?.nickname?.slice(0, 1) || 'MY'}
+            </Link>
           </div>
 
           <div className="progress-card progress-card-soft">
             <div className="progress-card-header">
-              <span>진행률</span>
+              <span>오늘 진행률</span>
               <strong>{progress}%</strong>
             </div>
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${progress}%` }} />
             </div>
           </div>
+
+          <div className="summary-chip-row">
+            <article className="summary-chip">
+              <span>스트릭</span>
+              <strong>{streak}일</strong>
+            </article>
+            <article className="summary-chip">
+              <span>남은 할 일</span>
+              <strong>{remainingCount}개</strong>
+            </article>
+            <article className="summary-chip">
+              <span>배틀</span>
+              <strong>{friendProfile ? battleDifferenceText : '대기 중'}</strong>
+            </article>
+          </div>
         </header>
 
         <main className="home-content home-content-polished">
-          <section className="battle-card battle-card-polished">
-            <div className="battle-copy">
-              <p className="battle-label">이번 주 배틀</p>
-              <h2 className="battle-title battle-title-large">{battleLeader}</h2>
-              <p className="battle-score battle-score-tight">{battleScoreText}</p>
-            </div>
-            <Link className="battle-rule-card" to={friendProfile ? '/battle' : '/friends'}>
-              <span>{friendProfile ? '배틀' : '친구 연결'}</span>
-              <strong>{friendProfile ? '공동 목표와 점수를 확인해 보세요' : '친구를 연결하고 실제 배틀을 시작해 보세요'}</strong>
-            </Link>
-          </section>
-
           <section className="home-section">
-            <div className="section-header">
-              <h2>오늘 바로 시작</h2>
-              <Link to="/create-routine">+ 추가</Link>
-            </div>
-
-            {quickStarts.length === 0 ? (
-              <article className="empty-state-card">
-                <h3>오늘 표시할 루틴이 아직 없어요</h3>
-                <p>샘플 데이터 없이 실제 루틴만 보여줘요. 새 루틴을 추가해 보세요.</p>
-                <Link className="inline-action-link" to="/create-routine">
-                  루틴 만들기
-                </Link>
-              </article>
-            ) : (
-              <div className="quick-grid quick-grid-polished">
-                {quickStarts.map((item) => (
-                  <button key={item.id} className="quick-chip quick-chip-polished" type="button">
-                    {item.title}
-                  </button>
-                ))}
+            <div className="section-header section-header-stack">
+              <div>
+                <h2>오늘 할 일</h2>
+                <p className="section-description">
+                  {personalGoals.length === 0
+                    ? '아직 오늘 할 일이 없어요.'
+                    : remainingCount === 0
+                      ? '오늘 할 일을 모두 끝냈어요.'
+                      : `지금 바로 체크할 루틴 ${remainingCount}개가 남아 있어요.`}
+                </p>
               </div>
-            )}
-          </section>
-
-          <section className="home-section">
-            <div className="section-header">
-              <h2>개인 목표</h2>
-              <Link to="/create-routine">루틴 추가</Link>
+              <Link to="/create-routine">추가</Link>
             </div>
-
-            {routineError && <p className="error home-error">{routineError}</p>}
-            {notice && <p className="notice-text">{notice}</p>}
 
             {personalGoals.length === 0 ? (
               <article className="empty-state-card">
-                <h3>오늘 보여줄 루틴이 아직 없어요</h3>
-                <p>매일 루틴을 만들거나 오늘 요일에 맞는 특정 요일 루틴을 추가해 보세요.</p>
+                <h3>아직 오늘 할 일이 없어요.</h3>
+                <p>루틴을 추가하면 홈에서 바로 완료 체크를 할 수 있어요.</p>
                 <Link className="inline-action-link" to="/create-routine">
-                  루틴 만들기
+                  루틴 추가하기
                 </Link>
               </article>
             ) : (
-              <div className="goal-list">
+              <div className="today-task-list">
                 {personalGoals.map((goal) => (
-                  <article key={goal.id} className={goal.completed ? 'goal-card goal-card-completed' : 'goal-card'}>
+                  <article
+                    key={goal.id}
+                    className={goal.completed ? 'home-task-card home-task-card-completed' : 'home-task-card'}
+                  >
                     <div className={goal.completed ? 'goal-check goal-check-completed' : 'goal-check'}>
                       {goal.completed ? '✓' : ''}
                     </div>
-                    <div className="goal-copy">
-                      <h3>{goal.title}</h3>
-                      <p>{goal.meta}</p>
-                    </div>
-                    <div className="goal-actions">
-                      <Link className="goal-delete-button" to={`/create-routine?id=${goal.id}`}>
-                        수정
-                      </Link>
-                      <button
-                        className="goal-delete-button"
-                        type="button"
-                        onClick={() => handleDeleteRoutine(goal.id)}
-                        disabled={pendingAction === `delete-${goal.id}`}
-                      >
-                        {pendingAction === `delete-${goal.id}` ? '삭제 중...' : '삭제'}
-                      </button>
-                      <button
-                        className="goal-status-link"
-                        type="button"
-                        onClick={() => handleToggleRoutine(goal.id)}
-                        disabled={pendingAction === `routine-${goal.id}`}
-                      >
-                        {pendingAction === `routine-${goal.id}` ? '저장 중...' : goal.completed ? '완료 취소' : '완료'}
-                      </button>
+
+                    <div className="home-task-main">
+                      <div className="goal-copy">
+                        <h3>{goal.title}</h3>
+                        <p>{goal.meta}</p>
+                      </div>
+
+                      <div className="home-task-actions">
+                        <button
+                          className="primary-button home-task-button"
+                          type="button"
+                          onClick={() => handleToggleRoutine(goal.id)}
+                          disabled={
+                            pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`
+                          }
+                        >
+                          {pendingAction === `routine-${goal.id}`
+                            ? '저장 중...'
+                            : goal.completed
+                              ? '완료 취소'
+                              : '완료'}
+                        </button>
+
+                        <details className="task-menu">
+                          <summary className="task-menu-trigger" aria-label={`${goal.title} 관리 메뉴`}>
+                            <span />
+                            <span />
+                            <span />
+                          </summary>
+
+                          <div className="task-menu-popover">
+                            <Link className="task-menu-item" to={`/create-routine?id=${goal.id}`}>
+                              수정
+                            </Link>
+                            <button
+                              className="task-menu-item task-menu-item-danger"
+                              type="button"
+                              onClick={() => handleDeleteRoutine(goal.id)}
+                              disabled={pendingAction === `delete-${goal.id}`}
+                            >
+                              {pendingAction === `delete-${goal.id}` ? '삭제 중...' : '삭제'}
+                            </button>
+                          </div>
+                        </details>
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -621,85 +727,112 @@ export default function Home() {
           </section>
 
           <section className="home-section">
-            <div className="section-header">
-              <h2>공동 목표</h2>
-              <Link to={friendProfile ? '/battle' : '/friends'}>{friendProfile ? '배틀 관리' : '친구 연결'}</Link>
+            <div className="section-header section-header-stack">
+              <div>
+                <h2>친구 배틀</h2>
+                <p className="section-description">{battleCopy.detail}</p>
+              </div>
+              <Link to={friendProfile ? '/battle' : '/friends'}>{friendProfile ? '자세히' : '연결'}</Link>
             </div>
+
+            <article
+              className={
+                friendProfile
+                  ? battleSummary.difference > 0
+                    ? 'home-battle-overview home-battle-overview-leading'
+                    : battleSummary.difference < 0
+                      ? 'home-battle-overview home-battle-overview-trailing'
+                      : 'home-battle-overview home-battle-overview-tied'
+                  : 'home-battle-overview'
+              }
+            >
+              <div className="home-battle-copy">
+                <p className="section-eyebrow">이번 주 점수</p>
+                <h3 className="battle-title battle-title-large">{battleCopy.headline}</h3>
+                <p className="battle-score battle-score-tight">{battleCopy.detail}</p>
+              </div>
+
+              <div className="home-battle-score-grid">
+                <article className="home-battle-score">
+                  <span>{profileName}</span>
+                  <strong>{battleSummary.myScore}점</strong>
+                </article>
+                <article className="home-battle-score">
+                  <span>{friendName}</span>
+                  <strong>{friendProfile ? battleSummary.friendScore : 0}점</strong>
+                </article>
+              </div>
+            </article>
 
             {!friendProfile ? (
               <article className="empty-state-card">
-                <h3>공동 목표는 친구 연결 후 사용할 수 있어요</h3>
-                <p>데모 목표 없이 실제 친구와 만든 공동 목표만 이곳에 표시돼요.</p>
+                <h3>친구를 연결하면 배틀이 시작돼요.</h3>
+                <p>초대 코드로 연결하면 점수 차이와 공동 목표를 바로 볼 수 있어요.</p>
                 <Link className="inline-action-link" to="/friends">
                   친구 연결하러 가기
                 </Link>
               </article>
             ) : sharedGoalViews.length === 0 ? (
               <article className="empty-state-card">
-                <h3>아직 공동 목표가 없어요</h3>
-                <p>{friendName}와 함께할 목표를 만들면 이곳에 실제 데이터가 쌓여요.</p>
+                <h3>아직 공동 목표가 없어요.</h3>
+                <p>{friendName}와 함께 체크할 목표를 만들면 배틀이 더 재미있어져요.</p>
                 <Link className="inline-action-link" to="/battle">
                   공동 목표 만들기
                 </Link>
               </article>
             ) : (
-              <div className="shared-list">
-                {sharedGoalViews.map((goal) => (
-                  <article key={goal.id} className="shared-card shared-card-polished">
-                    <div className="shared-header">
+              <div className="battle-goal-list">
+                {sharedGoalPreview.map((goal) => (
+                  <article key={goal.id} className="battle-goal-card">
+                    <div className="battle-goal-header">
                       <div>
                         <h3>{goal.title}</h3>
-                        <p>{goal.description || '같이 달성하면 추가 점수를 얻는 공동 목표예요.'}</p>
-                        <span className="shared-status-note">
-                          {goal.myDoneToday && goal.friendDoneToday
-                            ? '오늘 둘 다 완료했어요.'
-                            : goal.friendDoneToday
-                              ? `${friendName}가 먼저 완료했어요.`
-                              : `${friendName}와 같이 진행 중이에요.`}
-                        </span>
+                        <p>{goal.description || '친구와 함께 체크하는 공동 목표예요.'}</p>
                       </div>
                       <span className="proof-pill">+{goal.points ?? 3}점</span>
                     </div>
 
-                    <div className="shared-players">
-                      <div className="shared-player-box">
-                        <span>나</span>
-                        <strong>{goal.myDoneToday ? '완료' : '미완료'}</strong>
-                      </div>
-                      <div className="shared-player-box">
-                        <span>{friendName}</span>
-                        <strong>{goal.friendDoneToday ? '완료' : '미완료'}</strong>
-                      </div>
-                    </div>
+                    <p className="battle-goal-status">{goal.statusText}</p>
 
-                    <div className="shared-actions">
+                    <div className="battle-goal-actions">
                       <button
-                        className="primary-button"
+                        className="primary-button battle-goal-button"
                         type="button"
                         onClick={() => handleToggleSharedGoal(goal.id)}
                         disabled={pendingAction === `shared-${goal.id}`}
                       >
-                        {pendingAction === `shared-${goal.id}` ? '저장 중...' : goal.myDoneToday ? '완료 취소' : '완료하기'}
+                        {pendingAction === `shared-${goal.id}`
+                          ? '저장 중...'
+                          : goal.myDoneToday
+                            ? '완료 취소'
+                            : '나도 완료'}
                       </button>
-                      <button className="secondary-button" type="button" onClick={() => handleSendNudge(goal.title)}>
+                      <button className="text-button battle-goal-nudge" type="button" onClick={() => handleSendNudge(goal.title)}>
                         찌르기
                       </button>
                     </div>
-
-                    <div className="shared-tags">
-                      <span>실제 친구 연결</span>
-                      <span>실시간 체크</span>
-                    </div>
                   </article>
                 ))}
+
+                {sharedGoalViews.length > sharedGoalPreview.length && (
+                  <Link className="inline-action-link inline-action-link-light" to="/battle">
+                    공동 목표 전체 보기
+                  </Link>
+                )}
               </div>
             )}
           </section>
         </main>
 
-        <Link className="fab-button" to="/create-routine" aria-label="새 루틴 만들기">
-          +
+        <Link className="fab-button fab-button-extended" to="/create-routine" aria-label="루틴 추가">
+          + 루틴 추가
         </Link>
+
+        {toast && (
+          <div className="home-toast" role="status" aria-live="polite">
+            {toast.message}
+          </div>
+        )}
 
         <BottomTabBar />
       </div>

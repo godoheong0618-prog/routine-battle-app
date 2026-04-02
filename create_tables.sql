@@ -129,7 +129,7 @@ where id is null;
 
 update public.routines
 set
-  title = coalesce(nullif(btrim(title), ''), '이름 없는 루틴'),
+  title = coalesce(nullif(btrim(title), ''), 'Untitled routine'),
   target_count = case when target_count is null or target_count < 1 then 1 else target_count end,
   schedule_type = case
     when schedule_type in ('daily', 'specific_days') then schedule_type
@@ -153,7 +153,7 @@ where title is null
 
 update public.shared_goals
 set
-  title = coalesce(nullif(btrim(title), ''), '공동 목표'),
+  title = coalesce(nullif(btrim(title), ''), 'Shared goal'),
   points = case when points is null or points < 1 then 3 else points end
 where title is null
    or btrim(title) = ''
@@ -161,7 +161,7 @@ where title is null
    or points < 1;
 
 update public.nudges
-set message = coalesce(nullif(btrim(message), ''), '오늘 루틴 아직 안 했지?')
+set message = coalesce(nullif(btrim(message), ''), 'Have you done your routine today?')
 where message is null
    or btrim(message) = '';
 
