@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
+import { useLanguage } from '../i18n/LanguageContext';
+import { Locale } from '../i18n/messages';
 import { ProfileRow, SharedGoalCheckinRow, calculateStreak, ensureProfile } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
 type CheckinSummary = {
   check_in_date: string;
 };
+
+const LANGUAGE_OPTIONS: Locale[] = ['ko', 'en'];
 
 export default function MyPage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -16,6 +20,7 @@ export default function MyPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { locale, setLocale, t } = useLanguage();
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -56,14 +61,15 @@ export default function MyPage() {
           console.warn('MyPage optional shared checkins load failed:', sharedResult);
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : '내 정보를 불러오지 못했어요.');
+        console.warn('MyPage load failed:', loadError);
+        setError(t('my.loadError'));
       } finally {
         setLoading(false);
       }
     };
 
     loadProfile();
-  }, [navigate]);
+  }, [navigate, t]);
 
   const totalCompletions = personalCheckins.length + sharedCheckins.length;
   const streak = useMemo(() => calculateStreak(personalCheckins), [personalCheckins]);
@@ -76,7 +82,7 @@ export default function MyPage() {
   if (loading) {
     return (
       <div className="mobile-shell">
-        <div className="app-screen loading-screen">불러오는 중...</div>
+        <div className="app-screen loading-screen">{t('common.loading')}</div>
       </div>
     );
   }
@@ -85,9 +91,9 @@ export default function MyPage() {
     <div className="mobile-shell">
       <div className="app-screen subpage-screen">
         <header className="subpage-header">
-          <p className="section-eyebrow">My</p>
-          <h1>내 기록</h1>
-          <p>닉네임, 총 완료 수, 스트릭을 가볍게 확인하고 로그아웃할 수 있어요.</p>
+          <p className="section-eyebrow">{t('my.eyebrow')}</p>
+          <h1>{t('my.title')}</h1>
+          <p>{t('my.description')}</p>
         </header>
 
         <main className="subpage-content">
@@ -95,25 +101,56 @@ export default function MyPage() {
 
           <section className="stats-grid">
             <article className="stat-card">
-              <span>닉네임</span>
-              <strong>{profile?.nickname || '루틴러'}</strong>
+              <span>{t('my.profileLabel')}</span>
+              <strong>{profile?.nickname || t('my.profileFallback')}</strong>
             </article>
             <article className="stat-card">
-              <span>총 완료 수</span>
-              <strong>{totalCompletions}회</strong>
+              <span>{t('my.totalCompletionsLabel')}</span>
+              <strong>{t('my.countTimes', { count: totalCompletions })}</strong>
             </article>
             <article className="stat-card">
-              <span>연속 성공일</span>
-              <strong>{streak}일</strong>
+              <span>{t('my.streakLabel')}</span>
+              <strong>{t('my.countDays', { count: streak })}</strong>
             </article>
             <article className="stat-card">
-              <span>내 루틴 개수</span>
-              <strong>{routineCount}개</strong>
+              <span>{t('my.routinesLabel')}</span>
+              <strong>{t('my.countItems', { count: routineCount })}</strong>
             </article>
           </section>
 
+          <section className="section-block">
+            <div className="section-header section-header-stack">
+              <div>
+                <h2>{t('my.languageTitle')}</h2>
+                <p className="section-description">{t('my.languageDescription')}</p>
+              </div>
+            </div>
+
+            <div className="language-option-list">
+              {LANGUAGE_OPTIONS.map((option) => {
+                const selected = locale === option;
+                const label = option === 'ko' ? t('my.languageKo') : t('my.languageEn');
+
+                return (
+                  <button
+                    key={option}
+                    className={selected ? 'language-option language-option-active' : 'language-option'}
+                    type="button"
+                    onClick={() => setLocale(option)}
+                    aria-pressed={selected}
+                  >
+                    <div className="language-option-copy">
+                      <strong>{label}</strong>
+                    </div>
+                    <span className="language-option-check">{selected ? t('my.selected') : ''}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           <button className="secondary-button logout-button" type="button" onClick={handleLogout}>
-            로그아웃
+            {t('my.logout')}
           </button>
         </main>
 

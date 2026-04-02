@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
+import { useLanguage } from '../i18n/LanguageContext';
+import { MessageKey, MessageVars } from '../i18n/messages';
 import {
   CheckinRow,
   ProfileRow,
@@ -11,7 +13,6 @@ import {
   calculateStreak,
   ensureProfile,
   fetchProfile,
-  formatRoutineSchedule,
   getTodayDayKey,
   getTodayKey,
   isRoutineVisibleToday,
@@ -34,52 +35,59 @@ type ToastState = {
   message: string;
 };
 
+type TranslateFn = (key: MessageKey, vars?: MessageVars) => string;
+
 function buildBattleCopy({
   hasFriend,
   friendName,
   myName,
   difference,
   remainingActions,
+  t,
 }: {
   hasFriend: boolean;
   friendName: string;
   myName: string;
   difference: number;
   remainingActions: number;
+  t: TranslateFn;
 }) {
   if (!hasFriend) {
     return {
-      headline: 'Connect a friend to start the battle',
-      detail: 'Weekly score and shared goals will show up here once you connect.',
+      headline: t('home.battleCopy.noFriendHeadline'),
+      detail: t('home.battleCopy.noFriendDetail'),
     };
   }
 
   if (difference === 0) {
     return {
-      headline: 'You are tied right now',
+      headline: t('home.battleCopy.tiedHeadline'),
       detail:
         remainingActions > 0
-          ? 'One more check today can put you in front.'
-          : 'Today is done. Come back tomorrow and race again.',
+          ? t('home.battleCopy.tiedDetailActive')
+          : t('home.battleCopy.tiedDetailDone'),
     };
   }
 
   if (difference > 0) {
     return {
-      headline: `${myName} is ahead by ${difference}`,
+      headline: t('home.battleCopy.leadingHeadline', { name: myName, points: difference }),
       detail:
         remainingActions > 0
-          ? 'The momentum is good. Finish the rest to hold the lead.'
-          : 'You finished today strong. Keep the streak going.',
+          ? t('home.battleCopy.leadingDetailActive')
+          : t('home.battleCopy.leadingDetailDone'),
     };
   }
 
   return {
-    headline: `${friendName} is ahead by ${Math.abs(difference)}`,
+    headline: t('home.battleCopy.trailingHeadline', {
+      name: friendName,
+      points: Math.abs(difference),
+    }),
     detail:
       remainingActions > 0
-        ? 'One more action today could flip the lead.'
-        : 'Today is done. Check the battle screen for shared goals.',
+        ? t('home.battleCopy.trailingDetailActive')
+        : t('home.battleCopy.trailingDetailDone'),
   };
 }
 
@@ -95,6 +103,7 @@ export default function Home() {
   const [pendingAction, setPendingAction] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const todayKey = useMemo(() => getTodayKey(), []);
   const todayDayKey = useMemo(() => getTodayDayKey(), []);
@@ -145,7 +154,7 @@ export default function Home() {
         setFriendProfile(connectedFriend);
       } catch (loadError) {
         console.warn('Home profile load failed:', loadError);
-        loadNotice = 'We could not load your profile.';
+        loadNotice = t('home.loadProfileError');
 
         if (!active) {
           return;
@@ -172,7 +181,7 @@ export default function Home() {
         }
       } catch (loadError) {
         console.warn('Home routines load failed:', loadError);
-        loadNotice = 'We could not load today tasks.';
+        loadNotice = t('home.loadTasksError');
 
         if (active) {
           setRoutines([]);
@@ -192,7 +201,8 @@ export default function Home() {
 
         if (error) {
           console.warn('Home checkins load failed:', error);
-          loadNotice = 'We could not refresh your completion history.';
+          loadNotice = t('home.loadHistoryError');
+
           if (active) {
             setCheckins([]);
           }
@@ -201,7 +211,8 @@ export default function Home() {
         }
       } else {
         console.warn('Home checkins load failed:', checkinsResult.reason);
-        loadNotice = 'We could not refresh your completion history.';
+        loadNotice = t('home.loadHistoryError');
+
         if (active) {
           setCheckins([]);
         }
@@ -214,19 +225,22 @@ export default function Home() {
 
         if (error) {
           console.warn('Home shared goals load failed:', error);
-          loadNotice = loadNotice || 'We could not load battle info.';
+          loadNotice = loadNotice || t('home.loadBattleError');
+
           if (active) {
             setSharedGoals([]);
           }
         } else {
           loadedSharedGoals = (data as SharedGoalRow[]) ?? [];
+
           if (active) {
             setSharedGoals(loadedSharedGoals);
           }
         }
       } else {
         console.warn('Home shared goals load failed:', sharedGoalsResult.reason);
-        loadNotice = loadNotice || 'We could not load battle info.';
+        loadNotice = loadNotice || t('home.loadBattleError');
+
         if (active) {
           setSharedGoals([]);
         }
@@ -250,7 +264,8 @@ export default function Home() {
           }
         } catch (loadError) {
           console.warn('Home shared goal checkins load failed:', loadError);
-          loadNotice = loadNotice || 'We could not load shared goal progress.';
+          loadNotice = loadNotice || t('home.loadSharedError');
+
           if (active) {
             setSharedGoalCheckins([]);
           }
@@ -275,10 +290,10 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [navigate, t]);
 
-  const profileName = profile?.nickname || 'Me';
-  const friendName = friendProfile?.nickname || 'Friend';
+  const profileName = profile?.nickname || t('common.me');
+  const friendName = friendProfile?.nickname || t('common.friend');
 
   const todayRoutines = useMemo(
     () => routines.filter((routine) => isRoutineVisibleToday(routine, todayDayKey)),
@@ -302,9 +317,9 @@ export default function Home() {
     return todayRoutines.map((routine) => ({
       ...routine,
       completed: completedRoutineIds.has(String(routine.id)),
-      meta: routine.description || `${formatRoutineSchedule(routine)} · target ${routine.target_count ?? 1}`,
+      meta: routine.description || t('home.goalMeta', { count: routine.target_count ?? 1 }),
     }));
-  }, [completedRoutineIds, todayRoutines]);
+  }, [completedRoutineIds, t, todayRoutines]);
 
   const sharedGoalViews = useMemo<SharedGoalView[]>(() => {
     if (!friendProfile) {
@@ -322,14 +337,19 @@ export default function Home() {
           checkin.check_date === todayKey
       );
 
-      let statusText = 'Nobody has started this shared goal yet.';
+      let statusText = t('home.sharedStatus.none');
 
       if (myDoneToday && friendDoneToday) {
-        statusText = 'Both of you completed it today.';
+        statusText = t('home.sharedStatus.both');
       } else if (myDoneToday) {
-        statusText = `${profileName} is done. Waiting on ${friendName}.`;
+        statusText = t('home.sharedStatus.mine', {
+          mine: profileName,
+          friend: friendName,
+        });
       } else if (friendDoneToday) {
-        statusText = `${friendName} finished first. You can still catch up.`;
+        statusText = t('home.sharedStatus.friend', {
+          friend: friendName,
+        });
       }
 
       return {
@@ -339,7 +359,7 @@ export default function Home() {
         statusText,
       };
     });
-  }, [friendName, friendProfile, profileName, sharedGoalCheckins, sharedGoals, todayKey, userId]);
+  }, [friendName, friendProfile, profileName, sharedGoalCheckins, sharedGoals, t, todayKey, userId]);
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -358,16 +378,26 @@ export default function Home() {
   const remainingBattleActions =
     personalGoals.filter((goal) => !goal.completed).length +
     sharedGoalViews.filter((goal) => !goal.myDoneToday).length;
-  const battleCopy = buildBattleCopy({
-    hasFriend: Boolean(friendProfile),
-    friendName,
-    myName: profileName,
-    difference: battleSummary.difference,
-    remainingActions: remainingBattleActions,
-  });
+
+  const battleCopy = useMemo(
+    () =>
+      buildBattleCopy({
+        hasFriend: Boolean(friendProfile),
+        friendName,
+        myName: profileName,
+        difference: battleSummary.difference,
+        remainingActions: remainingBattleActions,
+        t,
+      }),
+    [battleSummary.difference, friendName, friendProfile, profileName, remainingBattleActions, t]
+  );
+
   const sharedGoalPreview = sharedGoalViews.slice(0, 1);
-  const battleDifferenceText =
-    !friendProfile || battleSummary.difference === 0 ? 'Tied' : `${Math.abs(battleSummary.difference)} pts`;
+  const battleDifferenceText = !friendProfile
+    ? t('home.battleWaiting')
+    : battleSummary.difference === 0
+      ? t('home.battleTied')
+      : t('home.battleDifference', { points: Math.abs(battleSummary.difference) });
 
   const showToast = (message: string) => {
     setToast({ id: Date.now(), message });
@@ -445,7 +475,7 @@ export default function Home() {
     if (saveError) {
       console.warn('Routine checkin save failed:', saveError);
       setCheckins(previousCheckins);
-      showToast('Could not save completion. Please try again.');
+      showToast(t('home.saveError'));
       setPendingAction('');
       return;
     }
@@ -459,7 +489,7 @@ export default function Home() {
       return;
     }
 
-    const confirmed = window.confirm('Delete this routine?');
+    const confirmed = window.confirm(t('home.deleteConfirm'));
 
     if (!confirmed) {
       return;
@@ -485,7 +515,7 @@ export default function Home() {
 
     if (routineDeleteError) {
       console.warn('Routine delete failed:', routineDeleteError);
-      showToast('Could not delete the routine.');
+      showToast(t('home.deleteError'));
       setPendingAction('');
       return;
     }
@@ -494,7 +524,7 @@ export default function Home() {
     setCheckins((current) =>
       current.filter((checkin) => !(checkin.user_id === userId && String(checkin.routine_id) === String(routineId)))
     );
-    showToast('Routine deleted.');
+    showToast(t('home.deleteSuccess'));
     setPendingAction('');
   };
 
@@ -518,25 +548,25 @@ export default function Home() {
         <header className="home-top-card home-summary-card">
           <div className="hero-top-row">
             <div>
-              <p className="section-eyebrow">Today</p>
+              <p className="section-eyebrow">{t('home.eyebrow')}</p>
               <h1 className="home-streak-title">
-                {completedCount} / {personalGoals.length} done
+                {t('home.summaryTitle', { done: completedCount, total: personalGoals.length })}
               </h1>
               <p className="hero-subtitle">
                 {personalGoals.length === 0
-                  ? 'Nothing is scheduled for today yet.'
-                  : `${progress}% complete · ${streak} day streak`}
+                  ? t('home.summaryEmpty')
+                  : t('home.summaryProgress', { progress, streak })}
               </p>
             </div>
 
-            <Link className="home-bell-button home-profile-shortcut" to="/mypage" aria-label="My page">
+            <Link className="home-bell-button home-profile-shortcut" to="/mypage" aria-label={t('home.myPageAria')}>
               {profile?.nickname?.slice(0, 1)?.toUpperCase() || 'MY'}
             </Link>
           </div>
 
           <div className="progress-card progress-card-soft">
             <div className="progress-card-header">
-              <span>Today progress</span>
+              <span>{t('home.progressLabel')}</span>
               <strong>{progress}%</strong>
             </div>
             <div className="progress-track">
@@ -546,16 +576,16 @@ export default function Home() {
 
           <div className="summary-chip-row">
             <article className="summary-chip">
-              <span>Streak</span>
-              <strong>{streak} days</strong>
+              <span>{t('home.streakLabel')}</span>
+              <strong>{t('home.streakValue', { count: streak })}</strong>
             </article>
             <article className="summary-chip">
-              <span>Left</span>
-              <strong>{remainingCount}</strong>
+              <span>{t('home.leftLabel')}</span>
+              <strong>{t('home.leftValue', { count: remainingCount })}</strong>
             </article>
             <article className="summary-chip">
-              <span>Battle</span>
-              <strong>{friendProfile ? battleDifferenceText : 'Waiting'}</strong>
+              <span>{t('home.battleLabel')}</span>
+              <strong>{battleDifferenceText}</strong>
             </article>
           </div>
         </header>
@@ -564,24 +594,24 @@ export default function Home() {
           <section className="home-section">
             <div className="section-header section-header-stack">
               <div>
-                <h2>Today tasks</h2>
+                <h2>{t('home.tasksTitle')}</h2>
                 <p className="section-description">
                   {personalGoals.length === 0
-                    ? 'There is nothing to do today.'
+                    ? t('home.tasksDescriptionEmpty')
                     : remainingCount === 0
-                      ? 'You finished everything for today.'
-                      : `${remainingCount} tasks are ready to complete right now.`}
+                      ? t('home.tasksDescriptionDone')
+                      : t('home.tasksDescriptionRemaining', { count: remainingCount })}
                 </p>
               </div>
-              <Link to="/create-routine">Add</Link>
+              <Link to="/create-routine">{t('home.add')}</Link>
             </div>
 
             {personalGoals.length === 0 ? (
               <article className="empty-state-card">
-                <h3>No tasks for today</h3>
-                <p>Add a routine and it will appear here with a single clear completion action.</p>
+                <h3>{t('home.tasksEmptyTitle')}</h3>
+                <p>{t('home.tasksEmptyBody')}</p>
                 <Link className="inline-action-link" to="/create-routine">
-                  Add routine
+                  {t('home.addRoutine')}
                 </Link>
               </article>
             ) : (
@@ -592,7 +622,7 @@ export default function Home() {
                     className={goal.completed ? 'home-task-card home-task-card-completed' : 'home-task-card'}
                   >
                     <div className={goal.completed ? 'goal-check goal-check-completed' : 'goal-check'}>
-                      {goal.completed ? 'OK' : ''}
+                      {goal.completed ? '✓' : ''}
                     </div>
 
                     <div className="home-task-main">
@@ -611,14 +641,17 @@ export default function Home() {
                           }
                         >
                           {pendingAction === `routine-${goal.id}`
-                            ? 'Saving...'
+                            ? t('home.saving')
                             : goal.completed
-                              ? 'Undo'
-                              : 'Complete'}
+                              ? t('home.undo')
+                              : t('home.complete')}
                         </button>
 
                         <details className="task-menu">
-                          <summary className="task-menu-trigger" aria-label={`${goal.title} menu`}>
+                          <summary
+                            className="task-menu-trigger"
+                            aria-label={t('home.menuAria', { title: goal.title })}
+                          >
                             <span />
                             <span />
                             <span />
@@ -626,7 +659,7 @@ export default function Home() {
 
                           <div className="task-menu-popover">
                             <Link className="task-menu-item" to={`/create-routine?id=${goal.id}`}>
-                              Edit
+                              {t('home.edit')}
                             </Link>
                             <button
                               className="task-menu-item task-menu-item-danger"
@@ -634,7 +667,7 @@ export default function Home() {
                               onClick={() => handleDeleteRoutine(goal.id)}
                               disabled={pendingAction === `delete-${goal.id}`}
                             >
-                              {pendingAction === `delete-${goal.id}` ? 'Deleting...' : 'Delete'}
+                              {pendingAction === `delete-${goal.id}` ? t('home.deleting') : t('home.delete')}
                             </button>
                           </div>
                         </details>
@@ -649,10 +682,12 @@ export default function Home() {
           <section className="home-section">
             <div className="section-header section-header-stack">
               <div>
-                <h2>Friend battle</h2>
+                <h2>{t('home.battleTitle')}</h2>
                 <p className="section-description">{battleCopy.detail}</p>
               </div>
-              <Link to={friendProfile ? '/battle' : '/friends'}>{friendProfile ? 'Details' : 'Connect'}</Link>
+              <Link to={friendProfile ? '/battle' : '/friends'}>
+                {friendProfile ? t('home.battleLinkDetails') : t('home.battleLinkConnect')}
+              </Link>
             </div>
 
             <article
@@ -667,7 +702,7 @@ export default function Home() {
               }
             >
               <div className="home-battle-copy">
-                <p className="section-eyebrow">This week</p>
+                <p className="section-eyebrow">{t('home.battleThisWeek')}</p>
                 <h3 className="battle-title battle-title-large">{battleCopy.headline}</h3>
                 <p className="battle-score battle-score-tight">{battleCopy.detail}</p>
               </div>
@@ -675,29 +710,29 @@ export default function Home() {
               <div className="home-battle-score-grid">
                 <article className="home-battle-score">
                   <span>{profileName}</span>
-                  <strong>{battleSummary.myScore} pts</strong>
+                  <strong>{t('home.scoreValue', { points: battleSummary.myScore })}</strong>
                 </article>
                 <article className="home-battle-score">
                   <span>{friendName}</span>
-                  <strong>{friendProfile ? battleSummary.friendScore : 0} pts</strong>
+                  <strong>{t('home.scoreValue', { points: friendProfile ? battleSummary.friendScore : 0 })}</strong>
                 </article>
               </div>
             </article>
 
             {!friendProfile ? (
               <article className="empty-state-card">
-                <h3>No friend connected yet</h3>
-                <p>Connect a friend to see score gaps and shared goals here.</p>
+                <h3>{t('home.connectFriendTitle')}</h3>
+                <p>{t('home.connectFriendBody')}</p>
                 <Link className="inline-action-link" to="/friends">
-                  Connect friend
+                  {t('home.connectFriendAction')}
                 </Link>
               </article>
             ) : sharedGoalViews.length === 0 ? (
               <article className="empty-state-card">
-                <h3>No shared goals yet</h3>
-                <p>Create one shared goal and the battle area will feel much more alive.</p>
+                <h3>{t('home.noSharedGoalsTitle')}</h3>
+                <p>{t('home.noSharedGoalsBody')}</p>
                 <Link className="inline-action-link" to="/battle">
-                  Create shared goal
+                  {t('home.createSharedGoal')}
                 </Link>
               </article>
             ) : (
@@ -707,40 +742,40 @@ export default function Home() {
                     <div className="battle-goal-header">
                       <div>
                         <h3>{goal.title}</h3>
-                        <p>{goal.description || 'A shared goal you can chase together.'}</p>
+                        <p>{goal.description || t('home.sharedFallback')}</p>
                       </div>
-                      <span className="proof-pill">+{goal.points ?? 3} pts</span>
+                      <span className="proof-pill">{t('home.scoreValue', { points: goal.points ?? 3 })}</span>
                     </div>
 
                     <p className="battle-goal-status">{goal.statusText}</p>
 
                     <div className="summary-chip-row">
                       <article className="summary-chip">
-                        <span>Me</span>
-                        <strong>{goal.myDoneToday ? 'Done' : 'Not yet'}</strong>
+                        <span>{t('home.sharedMeLabel')}</span>
+                        <strong>{goal.myDoneToday ? t('home.sharedDone') : t('home.sharedNotYet')}</strong>
                       </article>
                       <article className="summary-chip">
                         <span>{friendName}</span>
-                        <strong>{goal.friendDoneToday ? 'Done' : 'Waiting'}</strong>
+                        <strong>{goal.friendDoneToday ? t('home.sharedDone') : t('home.sharedWaiting')}</strong>
                       </article>
                       <article className="summary-chip">
-                        <span>Next</span>
-                        <strong>{goal.myDoneToday ? 'View battle' : 'Your move'}</strong>
+                        <span>{t('home.sharedNextLabel')}</span>
+                        <strong>{goal.myDoneToday ? t('home.sharedViewBattle') : t('home.sharedYourMove')}</strong>
                       </article>
                     </div>
                   </article>
                 ))}
 
                 <Link className="inline-action-link inline-action-link-light" to="/battle">
-                  Open battle details
+                  {t('home.openBattleDetails')}
                 </Link>
               </div>
             )}
           </section>
         </main>
 
-        <Link className="fab-button fab-button-extended" to="/create-routine" aria-label="Add routine">
-          + Add routine
+        <Link className="fab-button fab-button-extended" to="/create-routine" aria-label={t('home.addRoutine')}>
+          + {t('home.addRoutine')}
         </Link>
 
         {toast && (
