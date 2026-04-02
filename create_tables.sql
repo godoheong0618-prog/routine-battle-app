@@ -302,18 +302,28 @@ delete from public.friendships f
 using to_delete d
 where f.ctid = d.ctid;
 
+with profile_friends as (
+  select user_id as profile_id, friend_id, created_at
+  from public.friendships
+  union all
+  select friend_id as profile_id, user_id as friend_id, created_at
+  from public.friendships
+),
+ranked_profile_friends as (
+  select
+    profile_id,
+    friend_id,
+    row_number() over (
+      partition by profile_id
+      order by created_at asc, friend_id::text asc
+    ) as rn
+  from profile_friends
+)
 update public.profiles p
-set friend_id = friends.friend_id
-from (
-  select profile_id, max(friend_id) as friend_id
-  from (
-    select user_id as profile_id, friend_id from public.friendships
-    union all
-    select friend_id as profile_id, user_id as friend_id from public.friendships
-  ) pairs
-  group by profile_id
-) friends
-where p.id = friends.profile_id;
+set friend_id = rpf.friend_id
+from ranked_profile_friends rpf
+where p.id = rpf.profile_id
+  and rpf.rn = 1;
 
 update public.profiles p
 set friend_id = null
@@ -330,11 +340,23 @@ create unique index if not exists profiles_friend_code_key
 create unique index if not exists profiles_id_key
   on public.profiles (id);
 
+create unique index if not exists routines_id_key
+  on public.routines (id);
+
 create unique index if not exists checkins_user_routine_date_key
   on public.checkins (user_id, routine_id, check_date);
 
+create unique index if not exists shared_goals_id_key
+  on public.shared_goals (id);
+
 create unique index if not exists shared_goal_checkins_goal_user_date_key
   on public.shared_goal_checkins (goal_id, user_id, check_date);
+
+create unique index if not exists nudges_id_key
+  on public.nudges (id);
+
+create unique index if not exists friendships_id_key
+  on public.friendships (id);
 
 create unique index if not exists friendships_pair_key
   on public.friendships (least(user_id, friend_id), greatest(user_id, friend_id));
@@ -733,6 +755,14 @@ on public.checkins
 for delete
 to authenticated
 using (user_id = auth.uid());
+
+drop policy if exists checkins_update_own on public.checkins;
+create policy checkins_update_own
+on public.checkins
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
 
 drop policy if exists shared_goals_select_participants on public.shared_goals;
 create policy shared_goals_select_participants
