@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import BottomTabBar from '../components/BottomTabBar';
-import { NudgeRow, ProfileRow, connectFriendByCode, ensureProfile, fetchProfile } from '../lib/mvp';
+import { NudgeRow, ProfileRow, connectFriendByCode, ensureProfile, fetchProfile, normalizeFriendCode } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
 export default function Friends() {
@@ -186,7 +186,7 @@ export default function Friends() {
                 type="text"
                 placeholder="친구 코드를 입력해 주세요"
                 value={inviteCode}
-                onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+                onChange={(event) => setInviteCode(normalizeFriendCode(event.target.value))}
                 disabled={Boolean(friendProfile) || submitting}
               />
               <button className="primary-button" type="submit" disabled={Boolean(friendProfile) || submitting}>

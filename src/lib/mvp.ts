@@ -115,6 +115,10 @@ export function generateFriendCode(userId: string) {
   return userId.replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
+export function normalizeFriendCode(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 export function isRoutineVisibleToday(routine: RoutineRow, today = getTodayDayKey()) {
   if (routine.schedule_type === 'specific_days' && Array.isArray(routine.days_of_week)) {
     return routine.days_of_week.includes(today);
@@ -158,20 +162,39 @@ async function resolveFriendshipFriendId(userId: string) {
     .from('friendships')
     .select('user_id, friend_id')
     .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
   if (error) {
     console.warn('Friendships lookup failed:', error);
     return null;
   }
 
-  if (!data) {
+  if (!data || data.length === 0) {
     return null;
   }
 
-  const friendship = data as FriendshipRow;
-  return friendship.user_id === userId ? friendship.friend_id : friendship.user_id;
+  const friendships = data as FriendshipRow[];
+  const candidates = Array.from(
+    new Set(
+      friendships.flatMap((friendship) => {
+        if (friendship.user_id === userId && friendship.friend_id !== userId) {
+          return [friendship.friend_id];
+        }
+
+        if (friendship.friend_id === userId && friendship.user_id !== userId) {
+          return [friendship.user_id];
+        }
+
+        return [];
+      })
+    )
+  );
+
+  if (candidates.length > 1) {
+    console.warn('Multiple friendship rows found for user:', { userId, candidates });
+  }
+
+  return candidates[0] ?? null;
 }
 
 export async function resolveConnectedFriendId(userId: string, fallbackFriendId: string | null = null) {
@@ -259,7 +282,7 @@ export async function fetchProfile(profileId: string | null) {
 }
 
 export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode: string) {
-  const normalizedCode = inviteCode.trim().toUpperCase();
+  const normalizedCode = normalizeFriendCode(inviteCode);
 
   if (!normalizedCode) {
     throw new Error('친구 코드를 입력해 주세요.');
@@ -279,6 +302,7 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
     .from('profiles')
     .select('id, nickname, friend_code, friend_id')
     .eq('friend_code', normalizedCode)
+    .limit(1)
     .maybeSingle();
 
   if (targetError) {
@@ -298,7 +322,7 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
   const targetFriendId = await resolveConnectedFriendId(targetProfile.id, targetProfile.friend_id);
 
   if (targetFriendId) {
-    throw new Error('상대는 이미 다른 친구와 연결되어 있어요.');
+    throw new Error('상대방은 이미 다른 친구와 연결되어 있어요.');
   }
 
   const { error: friendshipInsertError } = await supabase.from('friendships').insert({
@@ -307,6 +331,10 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
   });
 
   if (friendshipInsertError) {
+    if (friendshipInsertError.code === '23505') {
+      throw new Error('이미 연결된 친구가 있어요.');
+    }
+
     throw friendshipInsertError;
   }
 
@@ -409,7 +437,6 @@ export function calculateBattleScores({
     myScore,
     friendScore,
     difference,
-    status:
-      difference > 0 ? '내가 앞서고 있어' : difference < 0 ? '친구가 앞서고 있어' : '지금은 동점이야',
+    status: difference > 0 ? '내가 앞서고 있어요' : difference < 0 ? '친구가 앞서고 있어요' : '지금은 동점이에요',
   };
 }
