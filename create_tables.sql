@@ -19,12 +19,20 @@ create table if not exists public.friendships (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   friend_id uuid not null,
+  battle_title text,
+  wager_text text,
+  battle_status text not null default 'active',
+  battle_started_at timestamptz,
   created_at timestamptz not null default now()
 );
 
 alter table public.friendships add column if not exists id uuid default gen_random_uuid();
 alter table public.friendships add column if not exists user_id uuid;
 alter table public.friendships add column if not exists friend_id uuid;
+alter table public.friendships add column if not exists battle_title text;
+alter table public.friendships add column if not exists wager_text text;
+alter table public.friendships add column if not exists battle_status text;
+alter table public.friendships add column if not exists battle_started_at timestamptz;
 alter table public.friendships add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.routines (
@@ -114,6 +122,15 @@ alter table public.nudges add column if not exists created_at timestamptz not nu
 update public.friendships
 set id = gen_random_uuid()
 where id is null;
+
+update public.friendships
+set battle_status = 'active'
+where battle_status is null
+   or btrim(battle_status) = ''
+   or battle_status not in ('active', 'paused', 'archived');
+
+alter table public.friendships alter column battle_status set default 'active';
+alter table public.friendships alter column battle_status set not null;
 
 update public.routines
 set id = gen_random_uuid()
@@ -361,6 +378,9 @@ create unique index if not exists friendships_id_key
 create unique index if not exists friendships_pair_key
   on public.friendships (least(user_id, friend_id), greatest(user_id, friend_id));
 
+create index if not exists friendships_battle_status_idx
+  on public.friendships (battle_status);
+
 create index if not exists routines_user_id_idx
   on public.routines (user_id);
 
@@ -537,6 +557,15 @@ begin
       add constraint shared_goals_points_check
       check (points >= 1);
   end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'friendships_battle_status_check'
+  ) then
+    alter table public.friendships
+      add constraint friendships_battle_status_check
+      check (battle_status in ('active', 'paused', 'archived'));
+  end if;
 end
 $$;
 
@@ -590,10 +619,28 @@ begin
 end;
 $$;
 
+create or replace function public.prevent_friendship_participant_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.user_id <> new.user_id or old.friend_id <> new.friend_id then
+    raise exception 'Friendship participants cannot be changed.' using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
 drop trigger if exists friendships_guard on public.friendships;
 create trigger friendships_guard
 before insert or update on public.friendships
 for each row execute function public.enforce_single_friendship();
+
+drop trigger if exists friendships_participants_immutable on public.friendships;
+create trigger friendships_participants_immutable
+before update on public.friendships
+for each row execute function public.prevent_friendship_participant_change();
 
 create or replace function public.handle_new_user_profile()
 returns trigger
@@ -681,6 +728,14 @@ on public.friendships
 for delete
 to authenticated
 using (auth.uid() = user_id or auth.uid() = friend_id);
+
+drop policy if exists friendships_update_participants on public.friendships;
+create policy friendships_update_participants
+on public.friendships
+for update
+to authenticated
+using (auth.uid() = user_id or auth.uid() = friend_id)
+with check (auth.uid() = user_id or auth.uid() = friend_id);
 
 drop policy if exists routines_select_owner_or_friend on public.routines;
 create policy routines_select_owner_or_friend

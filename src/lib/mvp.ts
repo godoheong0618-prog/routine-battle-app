@@ -52,9 +52,22 @@ export type NudgeRow = {
   created_at: string;
 };
 
-type FriendshipRow = {
+export type FriendshipRow = {
+  id: string;
   user_id: string;
   friend_id: string;
+  created_at: string;
+  battle_title: string | null;
+  wager_text: string | null;
+  battle_status: string | null;
+  battle_started_at: string | null;
+};
+
+export type BattleLeader = 'me' | 'friend' | 'tied' | 'waiting';
+
+type DatedCheckin = {
+  check_in_date?: string | null;
+  check_date?: string | null;
 };
 
 export const WEEKDAY_OPTIONS: Array<{ key: RoutineDayKey; label: string }> = [
@@ -77,11 +90,6 @@ export function getDateKey(date = new Date()) {
 export function getTodayKey() {
   return getDateKey(new Date());
 }
-
-type DatedCheckin = {
-  check_in_date?: string | null;
-  check_date?: string | null;
-};
 
 export function getCheckinDateValue(checkin: DatedCheckin) {
   return checkin.check_in_date ?? checkin.check_date ?? '';
@@ -108,9 +116,7 @@ export function getWeekEndKey(date = new Date()) {
 }
 
 export function calculateStreak(checkins: DatedCheckin[]) {
-  const uniqueDates = new Set(
-    checkins.map((checkin) => getCheckinDateValue(checkin)).filter(Boolean)
-  );
+  const uniqueDates = new Set(checkins.map((checkin) => getCheckinDateValue(checkin)).filter(Boolean));
   const cursor = new Date();
   let streak = 0;
 
@@ -168,10 +174,14 @@ export function formatRoutineSchedule(routine: RoutineRow) {
   return '매일';
 }
 
+function buildFriendshipPairFilter(firstUserId: string, secondUserId: string) {
+  return `and(user_id.eq.${firstUserId},friend_id.eq.${secondUserId}),and(user_id.eq.${secondUserId},friend_id.eq.${firstUserId})`;
+}
+
 async function resolveFriendshipFriendId(userId: string) {
   const { data, error } = await supabase
     .from('friendships')
-    .select('user_id, friend_id')
+    .select('id, user_id, friend_id, created_at, battle_title, wager_text, battle_status, battle_started_at')
     .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     .limit(10);
 
@@ -292,6 +302,24 @@ export async function fetchProfile(profileId: string | null) {
   return (data as ProfileRow | null) ?? null;
 }
 
+export async function fetchFriendshipByUsers(firstUserId: string, secondUserId: string | null) {
+  if (!secondUserId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('id, user_id, friend_id, created_at, battle_title, wager_text, battle_status, battle_started_at')
+    .or(buildFriendshipPairFilter(firstUserId, secondUserId))
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as FriendshipRow | null) ?? null;
+}
+
 export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode: string) {
   const normalizedCode = normalizeFriendCode(inviteCode);
 
@@ -300,7 +328,7 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
   }
 
   if (currentProfile.friend_code === normalizedCode) {
-    throw new Error('내 코드는 입력할 수 없어요.');
+    throw new Error('내 코드는 사용할 수 없어요.');
   }
 
   const currentFriendId = await resolveConnectedFriendId(currentProfile.id, currentProfile.friend_id);
@@ -327,7 +355,7 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
   const targetProfile = targetData as ProfileRow;
 
   if (targetProfile.id === currentProfile.id) {
-    throw new Error('내 코드는 입력할 수 없어요.');
+    throw new Error('내 코드는 사용할 수 없어요.');
   }
 
   const targetFriendId = await resolveConnectedFriendId(targetProfile.id, targetProfile.friend_id);
@@ -398,20 +426,27 @@ export function calculateBattleScores({
   const weekEnd = getWeekEndKey();
   const pointsByGoal = new Map(sharedGoals.map((goal) => [goal.id, goal.points ?? 3]));
 
-  const weekPersonal = checkins.filter(
-    (checkin) => {
-      const checkinDate = getCheckinDateValue(checkin);
-      return checkinDate >= weekStart && checkinDate <= weekEnd;
-    }
-  );
+  const weekPersonal = checkins.filter((checkin) => {
+    const checkinDate = getCheckinDateValue(checkin);
+    return checkinDate >= weekStart && checkinDate <= weekEnd;
+  });
+
   const weekShared = sharedGoalCheckins.filter(
     (checkin) => checkin.check_date >= weekStart && checkin.check_date <= weekEnd
   );
 
-  const myPersonalScore = weekPersonal.filter((checkin) => checkin.user_id === currentUserId).length * 2;
-  const friendPersonalScore = friendId
-    ? weekPersonal.filter((checkin) => checkin.user_id === friendId).length * 2
+  const myPersonalActions = weekPersonal.filter((checkin) => checkin.user_id === currentUserId).length;
+  const friendPersonalActions = friendId
+    ? weekPersonal.filter((checkin) => checkin.user_id === friendId).length
     : 0;
+
+  const mySharedCompletions = weekShared.filter((checkin) => checkin.user_id === currentUserId).length;
+  const friendSharedCompletions = friendId
+    ? weekShared.filter((checkin) => checkin.user_id === friendId).length
+    : 0;
+
+  const myPersonalScore = myPersonalActions * 2;
+  const friendPersonalScore = friendPersonalActions * 2;
 
   const mySharedScore = weekShared
     .filter((checkin) => checkin.user_id === currentUserId)
@@ -425,6 +460,7 @@ export function calculateBattleScores({
 
   let myBonus = 0;
   let friendBonus = 0;
+  let sharedBonusCount = 0;
   const sharedCompletionMap = new Map<string, Set<string>>();
 
   weekShared.forEach((checkin) => {
@@ -437,6 +473,7 @@ export function calculateBattleScores({
   if (friendId) {
     sharedCompletionMap.forEach((users) => {
       if (users.has(currentUserId) && users.has(friendId)) {
+        sharedBonusCount += 1;
         myBonus += 1;
         friendBonus += 1;
       }
@@ -446,11 +483,17 @@ export function calculateBattleScores({
   const myScore = myPersonalScore + mySharedScore + myBonus;
   const friendScore = friendPersonalScore + friendSharedScore + friendBonus;
   const difference = myScore - friendScore;
+  const leader: BattleLeader = !friendId ? 'waiting' : difference > 0 ? 'me' : difference < 0 ? 'friend' : 'tied';
 
   return {
     myScore,
     friendScore,
     difference,
-    status: difference > 0 ? '내가 앞서고 있어요' : difference < 0 ? '친구가 앞서고 있어요' : '지금은 동점이에요',
+    leader,
+    myPersonalActions,
+    friendPersonalActions,
+    mySharedCompletions,
+    friendSharedCompletions,
+    sharedBonusCount,
   };
 }

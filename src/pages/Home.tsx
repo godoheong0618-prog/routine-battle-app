@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
-import { MessageKey, MessageVars } from '../i18n/messages';
 import {
   CheckinRow,
+  FriendshipRow,
   ProfileRow,
   RoutineRow,
   SharedGoalCheckinRow,
@@ -12,6 +12,7 @@ import {
   calculateBattleScores,
   calculateStreak,
   ensureProfile,
+  fetchFriendshipByUsers,
   fetchProfile,
   getTodayDayKey,
   getTodayKey,
@@ -24,77 +25,52 @@ type PersonalGoalView = RoutineRow & {
   meta: string;
 };
 
-type SharedGoalView = SharedGoalRow & {
-  myDoneToday: boolean;
-  friendDoneToday: boolean;
-  statusText: string;
-};
-
 type ToastState = {
   id: number;
   message: string;
 };
 
-type TranslateFn = (key: MessageKey, vars?: MessageVars) => string;
-
-function buildBattleCopy({
+function getBattleHeadline({
   hasFriend,
-  friendName,
+  leader,
   myName,
+  friendName,
   difference,
-  remainingActions,
   t,
 }: {
   hasFriend: boolean;
-  friendName: string;
+  leader: 'me' | 'friend' | 'tied' | 'waiting';
   myName: string;
+  friendName: string;
   difference: number;
-  remainingActions: number;
-  t: TranslateFn;
+  t: ReturnType<typeof useLanguage>['t'];
 }) {
-  if (!hasFriend) {
-    return {
-      headline: t('home.battleCopy.noFriendHeadline'),
-      detail: t('home.battleCopy.noFriendDetail'),
-    };
+  if (!hasFriend || leader === 'waiting') {
+    return '';
   }
 
-  if (difference === 0) {
-    return {
-      headline: t('home.battleCopy.tiedHeadline'),
-      detail:
-        remainingActions > 0
-          ? t('home.battleCopy.tiedDetailActive')
-          : t('home.battleCopy.tiedDetailDone'),
-    };
+  if (leader === 'tied') {
+    return t('home.battleBarTiedTitle');
   }
 
-  if (difference > 0) {
-    return {
-      headline: t('home.battleCopy.leadingHeadline', { name: myName, points: difference }),
-      detail:
-        remainingActions > 0
-          ? t('home.battleCopy.leadingDetailActive')
-          : t('home.battleCopy.leadingDetailDone'),
-    };
-  }
-
-  return {
-    headline: t('home.battleCopy.trailingHeadline', {
-      name: friendName,
+  if (leader === 'me') {
+    return t('home.battleBarLeadMe', {
+      name: myName,
       points: Math.abs(difference),
-    }),
-    detail:
-      remainingActions > 0
-        ? t('home.battleCopy.trailingDetailActive')
-        : t('home.battleCopy.trailingDetailDone'),
-  };
+    });
+  }
+
+  return t('home.battleBarLeadFriend', {
+    name: friendName,
+    points: Math.abs(difference),
+  });
 }
 
 export default function Home() {
   const [userId, setUserId] = useState('');
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
+  const [battleMeta, setBattleMeta] = useState<FriendshipRow | null>(null);
   const [routines, setRoutines] = useState<RoutineRow[]>([]);
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
   const [sharedGoals, setSharedGoals] = useState<SharedGoalRow[]>([]);
@@ -170,6 +146,21 @@ export default function Home() {
       }
 
       try {
+        const friendship = await fetchFriendshipByUsers(user.id, connectedFriend?.id ?? null);
+
+        if (active) {
+          setBattleMeta(friendship);
+        }
+      } catch (loadError) {
+        console.warn('Home battle meta load failed:', loadError);
+        loadNotice = loadNotice || t('home.loadBattleError');
+
+        if (active) {
+          setBattleMeta(null);
+        }
+      }
+
+      try {
         const { data, error } = await supabase.from('routines').select('*').eq('user_id', user.id);
 
         if (error) {
@@ -181,19 +172,22 @@ export default function Home() {
         }
       } catch (loadError) {
         console.warn('Home routines load failed:', loadError);
-        loadNotice = t('home.loadTasksError');
+        loadNotice = loadNotice || t('home.loadTasksError');
 
         if (active) {
           setRoutines([]);
         }
       }
 
-      const relatedUserIds =
-        ensuredProfile && connectedFriend ? [user.id, connectedFriend.id] : [user.id];
+      const relatedUserIds = connectedFriend ? [user.id, connectedFriend.id] : [user.id];
 
       const [checkinsResult, sharedGoalsResult] = await Promise.allSettled([
         supabase.from('checkins').select('user_id, routine_id, check_in_date').in('user_id', relatedUserIds),
-        supabase.from('shared_goals').select('*').or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
+        supabase
+          .from('shared_goals')
+          .select('*')
+          .or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (checkinsResult.status === 'fulfilled') {
@@ -201,7 +195,7 @@ export default function Home() {
 
         if (error) {
           console.warn('Home checkins load failed:', error);
-          loadNotice = t('home.loadHistoryError');
+          loadNotice = loadNotice || t('home.loadHistoryError');
 
           if (active) {
             setCheckins([]);
@@ -211,7 +205,7 @@ export default function Home() {
         }
       } else {
         console.warn('Home checkins load failed:', checkinsResult.reason);
-        loadNotice = t('home.loadHistoryError');
+        loadNotice = loadNotice || t('home.loadHistoryError');
 
         if (active) {
           setCheckins([]);
@@ -321,46 +315,6 @@ export default function Home() {
     }));
   }, [completedRoutineIds, t, todayRoutines]);
 
-  const sharedGoalViews = useMemo<SharedGoalView[]>(() => {
-    if (!friendProfile) {
-      return [];
-    }
-
-    return sharedGoals.map((goal) => {
-      const myDoneToday = sharedGoalCheckins.some(
-        (checkin) => checkin.goal_id === goal.id && checkin.user_id === userId && checkin.check_date === todayKey
-      );
-      const friendDoneToday = sharedGoalCheckins.some(
-        (checkin) =>
-          checkin.goal_id === goal.id &&
-          checkin.user_id === friendProfile.id &&
-          checkin.check_date === todayKey
-      );
-
-      let statusText = t('home.sharedStatus.none');
-
-      if (myDoneToday && friendDoneToday) {
-        statusText = t('home.sharedStatus.both');
-      } else if (myDoneToday) {
-        statusText = t('home.sharedStatus.mine', {
-          mine: profileName,
-          friend: friendName,
-        });
-      } else if (friendDoneToday) {
-        statusText = t('home.sharedStatus.friend', {
-          friend: friendName,
-        });
-      }
-
-      return {
-        ...goal,
-        myDoneToday,
-        friendDoneToday,
-        statusText,
-      };
-    });
-  }, [friendName, friendProfile, profileName, sharedGoalCheckins, sharedGoals, t, todayKey, userId]);
-
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
       currentUserId: userId,
@@ -375,29 +329,34 @@ export default function Home() {
   const completedCount = personalGoals.filter((goal) => goal.completed).length;
   const remainingCount = Math.max(personalGoals.length - completedCount, 0);
   const progress = personalGoals.length === 0 ? 0 : Math.round((completedCount / personalGoals.length) * 100);
-  const remainingBattleActions =
-    personalGoals.filter((goal) => !goal.completed).length +
-    sharedGoalViews.filter((goal) => !goal.myDoneToday).length;
 
-  const battleCopy = useMemo(
-    () =>
-      buildBattleCopy({
-        hasFriend: Boolean(friendProfile),
-        friendName,
-        myName: profileName,
-        difference: battleSummary.difference,
-        remainingActions: remainingBattleActions,
-        t,
-      }),
-    [battleSummary.difference, friendName, friendProfile, profileName, remainingBattleActions, t]
-  );
+  const battleHeadline = getBattleHeadline({
+    hasFriend: Boolean(friendProfile),
+    leader: battleSummary.leader,
+    myName: profileName,
+    friendName,
+    difference: battleSummary.difference,
+    t,
+  });
 
-  const sharedGoalPreview = sharedGoalViews.slice(0, 1);
   const battleDifferenceText = !friendProfile
     ? t('home.battleWaiting')
-    : battleSummary.difference === 0
+    : battleSummary.leader === 'tied'
       ? t('home.battleTied')
       : t('home.battleDifference', { points: Math.abs(battleSummary.difference) });
+
+  const battleScoreLine = friendProfile
+    ? t('home.battleBarScoreLine', {
+        me: profileName,
+        myScore: battleSummary.myScore,
+        friend: friendName,
+        friendScore: battleSummary.friendScore,
+      })
+    : '';
+
+  const battleWagerText = battleMeta?.wager_text?.trim()
+    ? t('home.battleBarWager', { text: battleMeta.wager_text.trim() })
+    : t('home.battleBarNoWager');
 
   const showToast = (message: string) => {
     setToast({ id: Date.now(), message });
@@ -591,6 +550,60 @@ export default function Home() {
         </header>
 
         <main className="home-content home-content-polished">
+          <section className="home-section home-section-first">
+            <div className="section-header section-header-stack">
+              <div>
+                <h2>{t('home.battleSectionTitle')}</h2>
+                <p className="section-description">{t('home.battleSectionDescription')}</p>
+              </div>
+            </div>
+
+            <article
+              className={
+                friendProfile
+                  ? battleSummary.leader === 'me'
+                    ? 'battle-summary-bar battle-summary-bar-leading'
+                    : battleSummary.leader === 'friend'
+                      ? 'battle-summary-bar battle-summary-bar-trailing'
+                      : 'battle-summary-bar battle-summary-bar-tied'
+                  : 'battle-summary-bar'
+              }
+            >
+              {!friendProfile ? (
+                <div className="battle-summary-bar-empty">
+                  <div>
+                    <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
+                    <h3 className="battle-summary-bar-title">{t('home.battleBarNoFriendTitle')}</h3>
+                    <p className="battle-summary-bar-copy">{t('home.battleBarNoFriendBody')}</p>
+                  </div>
+
+                  <Link className="inline-action-link inline-action-link-light" to="/friends">
+                    {t('home.battleBarConnect')}
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <div className="battle-summary-bar-top">
+                    <div>
+                      <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
+                      <h3 className="battle-summary-bar-title">{battleHeadline}</h3>
+                      <p className="battle-summary-bar-copy">{battleScoreLine}</p>
+                    </div>
+
+                    <Link className="inline-action-link inline-action-link-light" to="/battle">
+                      {t('home.battleBarCta')}
+                    </Link>
+                  </div>
+
+                  <div className="battle-summary-bar-meta">
+                    <span className="battle-meta-pill">{battleDifferenceText}</span>
+                    <span className="battle-meta-pill">{battleWagerText}</span>
+                  </div>
+                </>
+              )}
+            </article>
+          </section>
+
           <section className="home-section">
             <div className="section-header section-header-stack">
               <div>
@@ -636,9 +649,7 @@ export default function Home() {
                           className="primary-button home-task-button"
                           type="button"
                           onClick={() => handleToggleRoutine(goal.id)}
-                          disabled={
-                            pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`
-                          }
+                          disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
                         >
                           {pendingAction === `routine-${goal.id}`
                             ? t('home.saving')
@@ -648,10 +659,7 @@ export default function Home() {
                         </button>
 
                         <details className="task-menu">
-                          <summary
-                            className="task-menu-trigger"
-                            aria-label={t('home.menuAria', { title: goal.title })}
-                          >
+                          <summary className="task-menu-trigger" aria-label={t('home.menuAria', { title: goal.title })}>
                             <span />
                             <span />
                             <span />
@@ -675,100 +683,6 @@ export default function Home() {
                     </div>
                   </article>
                 ))}
-              </div>
-            )}
-          </section>
-
-          <section className="home-section">
-            <div className="section-header section-header-stack">
-              <div>
-                <h2>{t('home.battleTitle')}</h2>
-                <p className="section-description">{battleCopy.detail}</p>
-              </div>
-              <Link to={friendProfile ? '/battle' : '/friends'}>
-                {friendProfile ? t('home.battleLinkDetails') : t('home.battleLinkConnect')}
-              </Link>
-            </div>
-
-            <article
-              className={
-                friendProfile
-                  ? battleSummary.difference > 0
-                    ? 'home-battle-overview home-battle-overview-leading'
-                    : battleSummary.difference < 0
-                      ? 'home-battle-overview home-battle-overview-trailing'
-                      : 'home-battle-overview home-battle-overview-tied'
-                  : 'home-battle-overview'
-              }
-            >
-              <div className="home-battle-copy">
-                <p className="section-eyebrow">{t('home.battleThisWeek')}</p>
-                <h3 className="battle-title battle-title-large">{battleCopy.headline}</h3>
-                <p className="battle-score battle-score-tight">{battleCopy.detail}</p>
-              </div>
-
-              <div className="home-battle-score-grid">
-                <article className="home-battle-score">
-                  <span>{profileName}</span>
-                  <strong>{t('home.scoreValue', { points: battleSummary.myScore })}</strong>
-                </article>
-                <article className="home-battle-score">
-                  <span>{friendName}</span>
-                  <strong>{t('home.scoreValue', { points: friendProfile ? battleSummary.friendScore : 0 })}</strong>
-                </article>
-              </div>
-            </article>
-
-            {!friendProfile ? (
-              <article className="empty-state-card">
-                <h3>{t('home.connectFriendTitle')}</h3>
-                <p>{t('home.connectFriendBody')}</p>
-                <Link className="inline-action-link" to="/friends">
-                  {t('home.connectFriendAction')}
-                </Link>
-              </article>
-            ) : sharedGoalViews.length === 0 ? (
-              <article className="empty-state-card">
-                <h3>{t('home.noSharedGoalsTitle')}</h3>
-                <p>{t('home.noSharedGoalsBody')}</p>
-                <Link className="inline-action-link" to="/battle">
-                  {t('home.createSharedGoal')}
-                </Link>
-              </article>
-            ) : (
-              <div className="battle-goal-list">
-                {sharedGoalPreview.map((goal) => (
-                  <article key={goal.id} className="battle-goal-card">
-                    <div className="battle-goal-header">
-                      <div>
-                        <h3>{goal.title}</h3>
-                        <p>{goal.description || t('home.sharedFallback')}</p>
-                      </div>
-                      <span className="proof-pill">{t('home.scoreValue', { points: goal.points ?? 3 })}</span>
-                    </div>
-
-                    <p className="battle-goal-status">{goal.statusText}</p>
-
-                    <div className="summary-chip-row">
-                      <article className="summary-chip">
-                        <span>{t('home.sharedMeLabel')}</span>
-                        <strong>{goal.myDoneToday ? t('home.sharedDone') : t('home.sharedNotYet')}</strong>
-                      </article>
-                      <article className="summary-chip">
-                        <span>{friendName}</span>
-                        <strong>{goal.friendDoneToday ? t('home.sharedDone') : t('home.sharedWaiting')}</strong>
-                      </article>
-                      <article className="summary-chip">
-                        <span>{t('home.sharedNextLabel')}</span>
-                        <strong>{goal.myDoneToday ? t('home.sharedViewBattle') : t('home.sharedYourMove')}</strong>
-                      </article>
-                    </div>
-                  </article>
-                ))}
-
-                <Link className="inline-action-link inline-action-link-light" to="/battle">
-                  {t('home.openBattleDetails')}
-                </Link>
               </div>
             )}
           </section>

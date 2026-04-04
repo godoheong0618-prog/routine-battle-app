@@ -1,14 +1,17 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
+import { useLanguage } from '../i18n/LanguageContext';
 import {
   CheckinRow,
+  FriendshipRow,
   NudgeRow,
   ProfileRow,
   SharedGoalCheckinRow,
   SharedGoalRow,
   calculateBattleScores,
   ensureProfile,
+  fetchFriendshipByUsers,
   fetchProfile,
   getTodayKey,
 } from '../lib/mvp';
@@ -17,12 +20,87 @@ import { supabase } from '../supabaseClient';
 type SharedGoalView = SharedGoalRow & {
   myDoneToday: boolean;
   friendDoneToday: boolean;
+  statusText: string;
 };
+
+function buildHeroTitle({
+  hasFriend,
+  leader,
+  myName,
+  friendName,
+  difference,
+  t,
+}: {
+  hasFriend: boolean;
+  leader: 'me' | 'friend' | 'tied' | 'waiting';
+  myName: string;
+  friendName: string;
+  difference: number;
+  t: ReturnType<typeof useLanguage>['t'];
+}) {
+  if (!hasFriend || leader === 'waiting') {
+    return t('battle.heroWaiting');
+  }
+
+  if (leader === 'tied') {
+    return t('battle.heroTied');
+  }
+
+  if (leader === 'me') {
+    return t('battle.heroLeadMe', { name: myName, points: Math.abs(difference) });
+  }
+
+  return t('battle.heroLeadFriend', { name: friendName, points: Math.abs(difference) });
+}
+
+function buildStatusLabel(
+  leader: 'me' | 'friend' | 'tied' | 'waiting',
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (leader === 'me') {
+    return t('battle.statusLeading');
+  }
+
+  if (leader === 'friend') {
+    return t('battle.statusTrailing');
+  }
+
+  if (leader === 'tied') {
+    return t('battle.statusTied');
+  }
+
+  return t('battle.statusWaiting');
+}
+
+function buildGoalStatus({
+  myDoneToday,
+  friendDoneToday,
+  t,
+}: {
+  myDoneToday: boolean;
+  friendDoneToday: boolean;
+  t: ReturnType<typeof useLanguage>['t'];
+}) {
+  if (myDoneToday && friendDoneToday) {
+    return t('battle.goalStatusBoth');
+  }
+
+  if (myDoneToday) {
+    return t('battle.goalStatusMine');
+  }
+
+  if (friendDoneToday) {
+    return t('battle.goalStatusFriend');
+  }
+
+  return t('battle.goalStatusNone');
+}
 
 export default function Battle() {
   const [userId, setUserId] = useState('');
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
+  const [battleMeta, setBattleMeta] = useState<FriendshipRow | null>(null);
   const [checkins, setCheckins] = useState<CheckinRow[]>([]);
   const [sharedGoals, setSharedGoals] = useState<SharedGoalRow[]>([]);
   const [sharedGoalCheckins, setSharedGoalCheckins] = useState<SharedGoalCheckinRow[]>([]);
@@ -33,6 +111,8 @@ export default function Battle() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState('');
+  const navigate = useNavigate();
+  const { t } = useLanguage();
   const todayKey = useMemo(() => getTodayKey(), []);
 
   useEffect(() => {
@@ -41,10 +121,11 @@ export default function Battle() {
     const loadBattle = async () => {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!user) {
-        setLoading(false);
+      if (userError || !user) {
+        navigate('/login');
         return;
       }
 
@@ -67,11 +148,21 @@ export default function Battle() {
 
         setFriendProfile(connectedFriend);
 
+        const friendship = await fetchFriendshipByUsers(user.id, connectedFriend?.id ?? null);
+
+        if (active) {
+          setBattleMeta(friendship);
+        }
+
         const relatedUserIds = connectedFriend ? [user.id, connectedFriend.id] : [user.id];
 
         const [checkinsResult, sharedGoalsResult] = await Promise.allSettled([
           supabase.from('checkins').select('user_id, routine_id, check_in_date').in('user_id', relatedUserIds),
-          supabase.from('shared_goals').select('*').or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
+          supabase
+            .from('shared_goals')
+            .select('*')
+            .or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`)
+            .order('created_at', { ascending: false }),
         ]);
 
         let loadedSharedGoals: SharedGoalRow[] = [];
@@ -79,14 +170,14 @@ export default function Battle() {
         if (checkinsResult.status === 'fulfilled' && !checkinsResult.value.error) {
           setCheckins((checkinsResult.value.data as CheckinRow[]) ?? []);
         } else {
-          console.warn('Battle optional checkins load failed:', checkinsResult);
+          console.warn('Battle checkins load failed:', checkinsResult);
         }
 
         if (sharedGoalsResult.status === 'fulfilled' && !sharedGoalsResult.value.error) {
           loadedSharedGoals = (sharedGoalsResult.value.data as SharedGoalRow[]) ?? [];
           setSharedGoals(loadedSharedGoals);
         } else {
-          console.warn('Battle optional shared goals load failed:', sharedGoalsResult);
+          console.warn('Battle shared goals load failed:', sharedGoalsResult);
         }
 
         if (loadedSharedGoals.length > 0) {
@@ -106,11 +197,14 @@ export default function Battle() {
               setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
             }
           } catch (sharedCheckinsError) {
-            console.warn('Battle optional shared goal checkins load failed:', sharedCheckinsError);
+            console.warn('Battle shared goal checkins load failed:', sharedCheckinsError);
+
             if (active) {
               setSharedGoalCheckins([]);
             }
           }
+        } else if (active) {
+          setSharedGoalCheckins([]);
         }
 
         if (connectedFriend) {
@@ -132,7 +226,8 @@ export default function Battle() {
               setNudges((data as NudgeRow[]) ?? []);
             }
           } catch (nudgeError) {
-            console.warn('Battle optional nudges load failed:', nudgeError);
+            console.warn('Battle nudges load failed:', nudgeError);
+
             if (active) {
               setNudges([]);
             }
@@ -141,8 +236,10 @@ export default function Battle() {
           setNudges([]);
         }
       } catch (loadError) {
+        console.warn('Battle load failed:', loadError);
+
         if (active) {
-          setError(loadError instanceof Error ? loadError.message : '배틀 정보를 불러오지 못했어요.');
+          setError(t('battle.loadError'));
         }
       } finally {
         if (active) {
@@ -156,9 +253,10 @@ export default function Battle() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [navigate, t]);
 
-  const friendName = friendProfile?.nickname || '친구';
+  const profileName = profile?.nickname || t('common.me');
+  const friendName = friendProfile?.nickname || t('common.friend');
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -170,28 +268,45 @@ export default function Battle() {
     });
   }, [checkins, friendProfile?.id, sharedGoalCheckins, sharedGoals, userId]);
 
-  const displayStatus = friendProfile
-    ? battleSummary.status
-    : '친구를 연결하면 실제 배틀 점수가 표시돼요';
-
   const sharedGoalViews = useMemo<SharedGoalView[]>(() => {
     if (!friendProfile) {
       return [];
     }
 
-    return sharedGoals.map((goal) => ({
-      ...goal,
-      myDoneToday: sharedGoalCheckins.some(
+    return sharedGoals.map((goal) => {
+      const myDoneToday = sharedGoalCheckins.some(
         (checkin) => checkin.goal_id === goal.id && checkin.user_id === userId && checkin.check_date === todayKey
-      ),
-      friendDoneToday: sharedGoalCheckins.some(
+      );
+      const friendDoneToday = sharedGoalCheckins.some(
         (checkin) =>
           checkin.goal_id === goal.id &&
           checkin.user_id === friendProfile.id &&
           checkin.check_date === todayKey
-      ),
-    }));
-  }, [friendProfile, sharedGoalCheckins, sharedGoals, todayKey, userId]);
+      );
+
+      return {
+        ...goal,
+        myDoneToday,
+        friendDoneToday,
+        statusText: buildGoalStatus({ myDoneToday, friendDoneToday, t }),
+      };
+    });
+  }, [friendProfile, sharedGoalCheckins, sharedGoals, t, todayKey, userId]);
+
+  const heroTitle = buildHeroTitle({
+    hasFriend: Boolean(friendProfile),
+    leader: battleSummary.leader,
+    myName: profileName,
+    friendName,
+    difference: battleSummary.difference,
+    t,
+  });
+
+  const heroStatus = buildStatusLabel(battleSummary.leader, t);
+  const battleTitle = battleMeta?.battle_title?.trim() || t('battle.titleFallback');
+  const battleWager = battleMeta?.wager_text?.trim()
+    ? t('battle.heroWager', { text: battleMeta.wager_text.trim() })
+    : t('battle.heroNoWager');
 
   const handleCreateSharedGoal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -199,7 +314,15 @@ export default function Battle() {
     setNotice('');
 
     if (!friendProfile || !userId) {
-      setNotice('친구를 먼저 연결해 주세요.');
+      setNotice(t('battle.noFriendBody'));
+      return;
+    }
+
+    const nextTitle = title.trim();
+    const nextDescription = description.trim();
+
+    if (!nextTitle) {
+      setError(t('battle.goalSaveError'));
       return;
     }
 
@@ -208,27 +331,28 @@ export default function Battle() {
       .insert({
         owner_id: userId,
         friend_id: friendProfile.id,
-        title: title.trim(),
-        description: description.trim() || null,
+        title: nextTitle,
+        description: nextDescription || null,
         points: 3,
       })
       .select('*')
       .single();
 
     if (insertError) {
-      setError(insertError.message);
+      setError(t('battle.goalSaveError'));
+      console.warn('Shared goal create failed:', insertError);
       return;
     }
 
-    setSharedGoals((current) => [...current, data as SharedGoalRow]);
+    setSharedGoals((current) => [data as SharedGoalRow, ...current]);
     setTitle('');
     setDescription('');
-    setNotice('공동 목표를 만들었어요.');
+    setNotice(t('battle.createGoalSuccess'));
   };
 
   const handleToggleSharedGoal = async (goalId: string) => {
     if (!userId || !friendProfile) {
-      setNotice('친구를 연결한 뒤 공동 목표를 체크할 수 있어요.');
+      setNotice(t('battle.noFriendBody'));
       return;
     }
 
@@ -249,7 +373,8 @@ export default function Battle() {
         .eq('check_date', todayKey);
 
       if (deleteError) {
-        setError(deleteError.message);
+        setError(t('battle.toggleSaveError'));
+        console.warn('Shared goal undo failed:', deleteError);
         setPendingAction('');
         return;
       }
@@ -273,7 +398,8 @@ export default function Battle() {
     const { error: insertError } = await supabase.from('shared_goal_checkins').insert(payload);
 
     if (insertError) {
-      setError(insertError.message);
+      setError(t('battle.toggleSaveError'));
+      console.warn('Shared goal complete failed:', insertError);
       setPendingAction('');
       return;
     }
@@ -284,33 +410,38 @@ export default function Battle() {
 
   const handleSendNudge = async (goalTitle?: string) => {
     if (!userId || !friendProfile) {
-      setNotice('친구를 먼저 연결해 주세요.');
+      setNotice(t('battle.noFriendBody'));
       return;
     }
+
+    const message = goalTitle
+      ? t('battle.nudgeMessageWithGoal', { title: goalTitle })
+      : t('battle.nudgeMessageDefault');
 
     const { data, error: nudgeError } = await supabase
       .from('nudges')
       .insert({
         sender_id: userId,
         receiver_id: friendProfile.id,
-        message: goalTitle ? `${goalTitle} 아직 안 했지?` : '아직 안 했지? 공동 목표 체크하자!',
+        message,
       })
       .select('id, sender_id, receiver_id, message, created_at')
       .single();
 
     if (nudgeError) {
-      setError(nudgeError.message);
+      setError(t('battle.loadError'));
+      console.warn('Nudge send failed:', nudgeError);
       return;
     }
 
     setNudges((current) => [data as NudgeRow, ...current].slice(0, 8));
-    setNotice(`${friendName}에게 찌르기를 보냈어요.`);
+    setNotice(t('battle.nudgeSuccess', { name: friendName }));
   };
 
   if (loading) {
     return (
       <div className="mobile-shell">
-        <div className="app-screen loading-screen">불러오는 중...</div>
+        <div className="app-screen loading-screen">{t('common.loading')}</div>
       </div>
     );
   }
@@ -318,160 +449,240 @@ export default function Battle() {
   return (
     <div className="mobile-shell">
       <div className="app-screen subpage-screen">
-        <header className="subpage-header">
-          <p className="section-eyebrow">Battle</p>
-          <h1>1:1 루틴 배틀</h1>
-          <p>개인 목표와 공동 목표 점수를 실제 친구 데이터 기준으로만 보여줘요.</p>
+        <header className="subpage-header battle-page-header">
+          <p className="section-eyebrow">{t('battle.eyebrow')}</p>
+          <h1>{t('battle.title')}</h1>
+          <p>{t('battle.description')}</p>
         </header>
 
         <main className="subpage-content">
           {error && <p className="error home-error">{error}</p>}
           {notice && <p className="notice-text">{notice}</p>}
 
-          <section className="battle-scoreboard">
-            <article className="score-panel">
-              <span>{profile?.nickname || '나'}</span>
-              <strong>{battleSummary.myScore}점</strong>
+          {!friendProfile ? (
+            <article className="empty-state-card">
+              <h3>{t('battle.noFriendTitle')}</h3>
+              <p>{t('battle.noFriendBody')}</p>
+              <Link className="inline-action-link" to="/friends">
+                {t('battle.openFriends')}
+              </Link>
             </article>
-            <article className="score-panel">
-              <span>{friendName}</span>
-              <strong>{friendProfile ? battleSummary.friendScore : 0}점</strong>
-            </article>
-            <article className="score-summary-card">
-              <span>이번 주 상태</span>
-              <strong>{displayStatus}</strong>
-              <p>{friendProfile ? `${Math.abs(battleSummary.difference)}점 차이` : '친구 연결 후 점수 비교가 시작돼요.'}</p>
-            </article>
-          </section>
+          ) : (
+            <>
+              <section
+                className={
+                  battleSummary.leader === 'me'
+                    ? 'battle-hero-card battle-hero-card-leading'
+                    : battleSummary.leader === 'friend'
+                      ? 'battle-hero-card battle-hero-card-trailing'
+                      : 'battle-hero-card battle-hero-card-tied'
+                }
+              >
+                <div className="battle-hero-top">
+                  <div>
+                    <p className="section-eyebrow battle-hero-eyebrow">{t('battle.heroEyebrow')}</p>
+                    <h2 className="battle-hero-title">{battleTitle}</h2>
+                    <p className="battle-hero-copy">{heroTitle}</p>
+                  </div>
+                  <span className="battle-hero-status-pill">{heroStatus}</span>
+                </div>
 
-          <section className="section-block">
-            <div className="section-header">
-              <h2>공동 목표 만들기</h2>
-              <span>+3점</span>
-            </div>
-            <form className="invite-card" onSubmit={handleCreateSharedGoal}>
-              <input
-                type="text"
-                placeholder="예: 밤 11시 전에 취침"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                required
-                disabled={!friendProfile}
-              />
-              <textarea
-                rows={3}
-                placeholder="친구와 같이 지킬 규칙을 적어 보세요"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                disabled={!friendProfile}
-              />
-              <button className="primary-button" type="submit" disabled={!friendProfile}>
-                공동 목표 추가
-              </button>
-            </form>
-          </section>
+                <div className="battle-hero-scoreline">
+                  {t('battle.heroScoreLine', {
+                    me: profileName,
+                    myScore: battleSummary.myScore,
+                    friend: friendName,
+                    friendScore: battleSummary.friendScore,
+                  })}
+                </div>
 
-          <section className="section-block">
-            <div className="section-header">
-              <h2>공동 목표 진행</h2>
-              <span>{sharedGoalViews.length}개</span>
-            </div>
-
-            {!friendProfile ? (
-              <article className="empty-state-card">
-                <h3>친구 연결 후 공동 목표를 시작할 수 있어요</h3>
-                <p>더미 목표 없이 실제 친구와 만든 공동 목표만 표시돼요.</p>
-                <Link className="inline-action-link" to="/friends">
-                  친구 연결하러 가기
-                </Link>
-              </article>
-            ) : sharedGoalViews.length === 0 ? (
-              <article className="empty-state-card">
-                <h3>아직 공동 목표가 없어요</h3>
-                <p>{friendName}와 함께할 공동 목표를 만들어 보세요.</p>
-              </article>
-            ) : (
-              <div className="shared-list">
-                {sharedGoalViews.map((goal) => (
-                  <article key={goal.id} className="shared-card">
-                    <div className="shared-header">
-                      <div>
-                        <h3>{goal.title}</h3>
-                        <p>{goal.description || '같이 달성하면 추가 점수를 얻는 공동 목표예요.'}</p>
-                        <span className="shared-status-note">
-                          {goal.myDoneToday && goal.friendDoneToday
-                            ? '오늘 둘 다 완료했어요.'
-                            : goal.myDoneToday
-                              ? '나는 완료했고 친구를 기다리는 중이에요.'
-                              : goal.friendDoneToday
-                                ? `${friendName}가 먼저 완료했어요.`
-                                : '아직 둘 다 시작 전이에요.'}
-                        </span>
-                      </div>
-                      <span className="proof-pill">+{goal.points ?? 3}점</span>
-                    </div>
-
-                    <div className="shared-players">
-                      <div className="shared-player-box">
-                        <span>나</span>
-                        <strong>{goal.myDoneToday ? '완료' : '미완료'}</strong>
-                      </div>
-                      <div className="shared-player-box">
-                        <span>{friendName}</span>
-                        <strong>{goal.friendDoneToday ? '완료' : '미완료'}</strong>
-                      </div>
-                    </div>
-
-                    <div className="shared-actions">
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={() => handleToggleSharedGoal(goal.id)}
-                        disabled={pendingAction === `shared-${goal.id}`}
-                      >
-                        {pendingAction === `shared-${goal.id}` ? '저장 중...' : goal.myDoneToday ? '완료 취소' : '완료하기'}
-                      </button>
-                      <button className="secondary-button" type="button" onClick={() => handleSendNudge(goal.title)}>
-                        찌르기
-                      </button>
-                    </div>
+                <div className="battle-hero-meta">
+                  <article className="battle-hero-meta-card">
+                    <span>{t('battle.heroDifference', { points: Math.abs(battleSummary.difference) })}</span>
+                    <strong>{heroStatus}</strong>
                   </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="section-block">
-            <div className="section-header">
-              <h2>최근 찌르기</h2>
-              <span>{nudges.length}개</span>
-            </div>
-
-            {!friendProfile ? (
-              <article className="empty-state-card">
-                <h3>친구를 연결하면 찌르기를 확인할 수 있어요</h3>
-                <p>실제 친구와 주고받은 기록만 여기에 보여요.</p>
-              </article>
-            ) : nudges.length === 0 ? (
-              <article className="empty-state-card">
-                <h3>최근 찌르기가 없어요</h3>
-                <p>{friendName}에게 먼저 한 번 보내 보세요.</p>
-              </article>
-            ) : (
-              <div className="feed-list">
-                {nudges.map((nudge) => (
-                  <article key={nudge.id} className="feed-card">
-                    <div className="feed-avatar">!</div>
-                    <div className="feed-copy">
-                      <h3>{nudge.sender_id === userId ? '내가 보낸 찌르기' : `${friendName}가 보낸 찌르기`}</h3>
-                      <p>{nudge.message}</p>
-                    </div>
-                    <span className="feed-time">{new Date(nudge.created_at).toLocaleDateString('ko-KR')}</span>
+                  <article className="battle-hero-meta-card">
+                    <span>{battleWager}</span>
+                    <strong>{battleMeta?.wager_text?.trim() ? battleMeta.wager_text.trim() : t('battle.heroNoWager')}</strong>
                   </article>
-                ))}
-              </div>
-            )}
-          </section>
+                </div>
+              </section>
+
+              <section className="battle-score-strip">
+                <article className="score-panel">
+                  <span>{t('battle.scoreboardMe')}</span>
+                  <strong>{battleSummary.myScore}점</strong>
+                </article>
+                <article className="score-panel">
+                  <span>{t('battle.scoreboardFriend')}</span>
+                  <strong>{battleSummary.friendScore}점</strong>
+                </article>
+                <article className="score-summary-card">
+                  <span>{t('battle.scoreboardBonus')}</span>
+                  <strong>+{battleSummary.sharedBonusCount}</strong>
+                  <p>{t('battle.heroStatus', { status: heroStatus })}</p>
+                </article>
+              </section>
+
+              <section className="section-block">
+                <div className="section-header section-header-stack">
+                  <div>
+                    <h2>{t('battle.sharedTitle')}</h2>
+                    <p className="section-description">{t('battle.sharedDescription')}</p>
+                  </div>
+                </div>
+
+                {sharedGoalViews.length === 0 ? (
+                  <article className="empty-state-card">
+                    <h3>{t('battle.sharedEmptyTitle')}</h3>
+                    <p>{t('battle.sharedEmptyBody')}</p>
+                  </article>
+                ) : (
+                  <div className="shared-list battle-shared-list">
+                    {sharedGoalViews.map((goal) => (
+                      <article key={goal.id} className="shared-card battle-shared-card">
+                        <div className="shared-header">
+                          <div>
+                            <h3>{goal.title}</h3>
+                            <p>{goal.description || t('battle.sharedDescription')}</p>
+                          </div>
+                          <span className="proof-pill">{t('battle.goalPoints', { points: goal.points ?? 3 })}</span>
+                        </div>
+
+                        <p className="battle-goal-status">{goal.statusText}</p>
+
+                        <div className="shared-players battle-shared-players">
+                          <div className={goal.myDoneToday ? 'shared-player-box shared-player-box-active' : 'shared-player-box'}>
+                            <span>{t('battle.myStatusLabel')}</span>
+                            <strong>{goal.myDoneToday ? t('battle.goalDone') : t('battle.goalWaiting')}</strong>
+                          </div>
+                          <div
+                            className={
+                              goal.friendDoneToday ? 'shared-player-box shared-player-box-active' : 'shared-player-box'
+                            }
+                          >
+                            <span>{friendName}</span>
+                            <strong>{goal.friendDoneToday ? t('battle.goalDone') : t('battle.goalWaiting')}</strong>
+                          </div>
+                        </div>
+
+                        <div className="shared-actions">
+                          <button
+                            className="primary-button"
+                            type="button"
+                            onClick={() => handleToggleSharedGoal(goal.id)}
+                            disabled={pendingAction === `shared-${goal.id}`}
+                          >
+                            {pendingAction === `shared-${goal.id}`
+                              ? t('home.saving')
+                              : goal.myDoneToday
+                                ? t('battle.goalUndo')
+                                : t('battle.goalComplete')}
+                          </button>
+                          <button className="secondary-button" type="button" onClick={() => handleSendNudge(goal.title)}>
+                            {t('battle.nudgeAction')}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="section-block">
+                <div className="section-header section-header-stack">
+                  <div>
+                    <h2>{t('battle.createGoalTitle')}</h2>
+                    <p className="section-description">{t('battle.createGoalDescription')}</p>
+                  </div>
+                </div>
+
+                <form className="invite-card battle-goal-form" onSubmit={handleCreateSharedGoal}>
+                  <input
+                    type="text"
+                    placeholder={t('battle.goalTitlePlaceholder')}
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    required
+                  />
+                  <textarea
+                    rows={3}
+                    placeholder={t('battle.goalDescriptionPlaceholder')}
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                  <button className="primary-button" type="submit">
+                    {t('battle.createGoalAction')}
+                  </button>
+                </form>
+              </section>
+
+              <section className="section-block">
+                <div className="section-header section-header-stack">
+                  <div>
+                    <h2>{t('battle.statsTitle')}</h2>
+                    <p className="section-description">{t('battle.statsDescription')}</p>
+                  </div>
+                </div>
+
+                <div className="battle-history-grid">
+                  <article className="stat-card battle-history-card">
+                    <span>{t('battle.statPersonalMe')}</span>
+                    <strong>{battleSummary.myPersonalActions}회</strong>
+                  </article>
+                  <article className="stat-card battle-history-card">
+                    <span>{t('battle.statPersonalFriend')}</span>
+                    <strong>{battleSummary.friendPersonalActions}회</strong>
+                  </article>
+                  <article className="stat-card battle-history-card">
+                    <span>{t('battle.statSharedMe')}</span>
+                    <strong>{battleSummary.mySharedCompletions}회</strong>
+                  </article>
+                  <article className="stat-card battle-history-card">
+                    <span>{t('battle.statSharedFriend')}</span>
+                    <strong>{battleSummary.friendSharedCompletions}회</strong>
+                  </article>
+                  <article className="stat-card battle-history-card">
+                    <span>{t('battle.statBonus')}</span>
+                    <strong>+{battleSummary.sharedBonusCount}</strong>
+                  </article>
+                </div>
+              </section>
+
+              <section className="section-block">
+                <div className="section-header section-header-stack">
+                  <div>
+                    <h2>{t('battle.recentTitle')}</h2>
+                    <p className="section-description">{t('battle.recentDescription')}</p>
+                  </div>
+                </div>
+
+                {nudges.length === 0 ? (
+                  <article className="empty-state-card">
+                    <h3>{t('battle.recentEmptyTitle')}</h3>
+                    <p>{t('battle.recentEmptyBody')}</p>
+                  </article>
+                ) : (
+                  <div className="feed-list">
+                    {nudges.map((nudge) => (
+                      <article key={nudge.id} className="feed-card">
+                        <div className="feed-avatar">!</div>
+                        <div className="feed-copy">
+                          <h3>
+                            {nudge.sender_id === userId
+                              ? t('battle.recentSentByMe')
+                              : t('battle.recentSentByFriend', { name: friendName })}
+                          </h3>
+                          <p>{nudge.message}</p>
+                        </div>
+                        <span className="feed-time">{new Date(nudge.created_at).toLocaleDateString()}</span>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </main>
 
         <BottomTabBar />

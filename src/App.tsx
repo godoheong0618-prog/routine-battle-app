@@ -4,7 +4,6 @@ import Battle from './pages/Battle';
 import CreateRoutine from './pages/CreateRoutine';
 import DisplayName from './pages/DisplayName';
 import Entry from './pages/Entry';
-import Feed from './pages/Feed';
 import Friends from './pages/Friends';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -37,14 +36,6 @@ export default function App() {
         }
       />
       <Route
-        path="/feed"
-        element={
-          <ProtectedRoute>
-            <Feed />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/battle"
         element={
           <ProtectedRoute>
@@ -52,6 +43,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/feed" element={<Navigate to="/battle" replace />} />
       <Route
         path="/mypage"
         element={

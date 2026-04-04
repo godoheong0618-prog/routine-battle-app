@@ -1605,6 +1605,212 @@ h3 {
   z-index: 5;
 }
 
+.battle-summary-bar {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), transparent 40%),
+    linear-gradient(180deg, #1b1a18 0%, #27241f 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 10px 24px rgba(31, 25, 18, 0.12);
+}
+
+.battle-summary-bar-leading {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.13), transparent 40%),
+    linear-gradient(180deg, #1a1917 0%, #2a2924 100%);
+}
+
+.battle-summary-bar-trailing {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.13), transparent 40%),
+    linear-gradient(180deg, #1b1a18 0%, #332925 100%);
+}
+
+.battle-summary-bar-tied {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.13), transparent 40%),
+    linear-gradient(180deg, #1b1a18 0%, #2d2924 100%);
+}
+
+.battle-summary-bar-top,
+.battle-summary-bar-empty,
+.battle-hero-top,
+.friend-profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.battle-summary-bar-title,
+.battle-hero-title {
+  margin-top: 8px;
+  font-size: 24px;
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.battle-summary-bar-copy,
+.battle-hero-copy {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.58;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.battle-summary-bar-meta,
+.friend-profile-meta {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.battle-meta-pill,
+.battle-hero-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.battle-page-header {
+  padding-bottom: 0;
+}
+
+.battle-hero-card {
+  padding: 22px 18px;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), transparent 38%),
+    linear-gradient(180deg, #191816 0%, #27231f 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 34px rgba(31, 25, 18, 0.14);
+}
+
+.battle-hero-card-leading {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 38%),
+    linear-gradient(180deg, #171614 0%, #26231f 100%);
+}
+
+.battle-hero-card-trailing {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), transparent 38%),
+    linear-gradient(180deg, #191816 0%, #342925 100%);
+}
+
+.battle-hero-card-tied {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.13), transparent 38%),
+    linear-gradient(180deg, #191816 0%, #2c2924 100%);
+}
+
+.battle-hero-eyebrow {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.battle-hero-scoreline {
+  margin-top: 18px;
+  padding: 15px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.battle-hero-meta {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.battle-hero-meta-card {
+  min-height: 96px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.battle-hero-meta-card span {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.battle-hero-meta-card strong {
+  font-size: 16px;
+  line-height: 1.4;
+  color: #ffffff;
+}
+
+.battle-score-strip {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.battle-score-strip .score-summary-card {
+  grid-column: 1 / -1;
+}
+
+.shared-player-box-active {
+  background: #ece8e0;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+}
+
+.battle-goal-form .field-group {
+  margin: 0;
+}
+
+.battle-history-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.battle-history-card {
+  min-height: 108px;
+}
+
+.friend-code-card h3 {
+  letter-spacing: 0.08em;
+}
+
+.friend-profile-card {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.battle-setup-form .field-group + .field-group {
+  margin-top: 0;
+}
+
 @keyframes home-skeleton-pulse {
   0% {
     background-position: 200% 0;
@@ -1644,6 +1850,19 @@ h3 {
 
   .battle-card,
   .battle-scoreboard {
+    grid-template-columns: 1fr;
+  }
+
+  .battle-summary-bar-top,
+  .battle-summary-bar-empty,
+  .battle-hero-top,
+  .friend-profile-header {
+    flex-direction: column;
+  }
+
+  .battle-hero-meta,
+  .battle-score-strip,
+  .battle-history-grid {
     grid-template-columns: 1fr;
   }
 
