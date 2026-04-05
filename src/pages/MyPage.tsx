@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../components/AuthProvider';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Locale } from '../i18n/messages';
+import { getAuthCopy } from '../lib/auth';
 import { ProfileRow, SharedGoalCheckinRow, calculateStreak, ensureProfile } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -21,6 +23,7 @@ export default function MyPage() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { locale, setLocale, t } = useLanguage();
+  const { signOut } = useAuth();
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -73,10 +76,17 @@ export default function MyPage() {
 
   const totalCompletions = personalCheckins.length + sharedCheckins.length;
   const streak = useMemo(() => calculateStreak(personalCheckins), [personalCheckins]);
+  const authCopy = useMemo(() => getAuthCopy(locale), [locale]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
+    const { error: signOutError } = await signOut();
+
+    if (signOutError) {
+      setError(authCopy.logoutError);
+      return;
+    }
+
+    navigate('/login', { replace: true });
   };
 
   if (loading) {

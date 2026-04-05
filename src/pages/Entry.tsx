@@ -1,19 +1,27 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../components/AuthProvider';
 import { resolveInitialPath } from '../lib/appFlow';
 
 const SPLASH_DELAY_MS = 1200;
 
 export default function Entry() {
   const navigate = useNavigate();
+  const { loading, user } = useAuth();
 
   useEffect(() => {
+    if (loading) {
+      return;
+    }
+
     let active = true;
+    let timerId = 0;
 
     const start = async () => {
-      const nextPathPromise = resolveInitialPath();
-      await new Promise((resolve) => window.setTimeout(resolve, SPLASH_DELAY_MS));
-      const nextPath = await nextPathPromise;
+      const nextPath = await resolveInitialPath(user);
+      await new Promise<void>((resolve) => {
+        timerId = window.setTimeout(resolve, SPLASH_DELAY_MS);
+      });
 
       if (!active) {
         return;
@@ -26,8 +34,9 @@ export default function Entry() {
 
     return () => {
       active = false;
+      window.clearTimeout(timerId);
     };
-  }, [navigate]);
+  }, [loading, navigate, user]);
 
   return (
     <div className="mobile-shell">

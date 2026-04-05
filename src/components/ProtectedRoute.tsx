@@ -1,8 +1,9 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useLanguage } from '../i18n/LanguageContext';
 import { hasDisplayName, hasSeenOnboarding } from '../lib/appFlow';
 import { ensureProfile } from '../lib/mvp';
-import { supabase } from '../supabaseClient';
+import { useAuth } from './AuthProvider';
 
 type AccessStatus = 'loading' | 'authorized' | 'needs_onboarding' | 'needs_profile' | 'unauthenticated';
 
@@ -12,21 +13,22 @@ type ProtectedRouteProps = {
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [status, setStatus] = useState<AccessStatus>('loading');
+  const { loading, user } = useAuth();
+  const { t } = useLanguage();
 
   useEffect(() => {
+    if (loading) {
+      setStatus('loading');
+      return;
+    }
+
     let active = true;
 
     const checkAccess = async () => {
+      setStatus('loading');
+
       if (!hasSeenOnboarding()) {
         setStatus('needs_onboarding');
-        return;
-      }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!active) {
         return;
       }
 
@@ -57,12 +59,12 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [loading, user]);
 
   if (status === 'loading') {
     return (
       <div className="mobile-shell">
-        <div className="app-screen loading-screen">불러오는 중...</div>
+        <div className="app-screen loading-screen">{t('common.loading')}</div>
       </div>
     );
   }

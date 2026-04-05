@@ -1,75 +1,202 @@
-import { FormEvent, useState } from 'react';
+import type { Provider } from '@supabase/supabase-js';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { hasSeenOnboarding } from '../lib/appFlow';
+import { useAuth } from '../components/AuthProvider';
+import { useLanguage } from '../i18n/LanguageContext';
+import { resolvePostAuthPath } from '../lib/appFlow';
+import {
+  getAuthCopy,
+  getAuthRedirectUrl,
+  getLocalizedAuthErrorMessage,
+  getProviderUnavailableMessage,
+  isAppleAuthEnabled,
+  isGoogleAuthEnabled,
+} from '../lib/auth';
 import { supabase } from '../supabaseClient';
+
+type PendingAction = 'email' | Provider | null;
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
+  const { locale } = useLanguage();
+
+  const copy = useMemo(() => getAuthCopy(locale), [locale]);
+  const appleEnabled = isAppleAuthEnabled();
+  const googleEnabled = isGoogleAuthEnabled();
+
+  useEffect(() => {
+    if (loading || !user) {
+      return;
+    }
+
+    let active = true;
+
+    const redirectSignedInUser = async () => {
+      const nextPath = await resolvePostAuthPath(user);
+
+      if (active) {
+        navigate(nextPath, { replace: true });
+      }
+    };
+
+    redirectSignedInUser();
+
+    return () => {
+      active = false;
+    };
+  }, [loading, navigate, user]);
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
-    setLoading(true);
+    setNotice('');
+    setPendingAction('email');
 
     const {
       data: { session },
       error: signUpError,
     } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
+      options: {
+        emailRedirectTo: getAuthRedirectUrl(),
+      },
     });
 
     if (signUpError) {
-      setError(signUpError.message);
-      setLoading(false);
+      setError(getLocalizedAuthErrorMessage(signUpError, locale));
+      setPendingAction(null);
       return;
     }
 
     if (session) {
-      navigate(hasSeenOnboarding() ? '/display-name' : '/onboarding', { replace: true });
+      const nextPath = await resolvePostAuthPath();
+      navigate(nextPath, { replace: true });
       return;
     }
 
-    navigate(hasSeenOnboarding() ? '/login' : '/onboarding', { replace: true });
+    navigate('/login', {
+      replace: true,
+      state: { notice: copy.emailVerificationNotice },
+    });
   };
+
+  const handleSocialSignUp = async (provider: Provider) => {
+    setError('');
+    setNotice('');
+
+    if (provider === 'google' && !googleEnabled) {
+      setNotice(getProviderUnavailableMessage(provider, locale));
+      return;
+    }
+
+    if (provider === 'apple' && !appleEnabled) {
+      setNotice(getProviderUnavailableMessage(provider, locale));
+      return;
+    }
+
+    setPendingAction(provider);
+
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: getAuthRedirectUrl(),
+        queryParams: provider === 'google' ? { access_type: 'offline', prompt: 'consent' } : undefined,
+      },
+    });
+
+    if (oauthError) {
+      setError(getLocalizedAuthErrorMessage(oauthError, locale));
+      setPendingAction(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="mobile-shell">
+        <div className="app-screen loading-screen">{copy.callbackLoading}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="mobile-shell">
       <div className="app-screen auth-screen">
         <div className="container auth-container">
           <div className="auth-copy">
-            <p className="section-eyebrow">회원가입</p>
-            <h1>새 계정을 만들고 루틴을 시작해요</h1>
-            <p>가입을 마치면 표시 이름만 설정하고 바로 홈으로 들어갈 수 있어요.</p>
+            <p className="section-eyebrow">{copy.signUpEyebrow}</p>
+            <h1>{copy.signUpTitle}</h1>
+            <p>{copy.signUpSubtitle}</p>
           </div>
 
           <form onSubmit={handleSignUp}>
             <input
               required
+              autoComplete="email"
               type="email"
-              placeholder="이메일"
+              placeholder={copy.emailPlaceholder}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={pendingAction !== null}
             />
             <input
               required
+              autoComplete="new-password"
+              minLength={6}
               type="password"
-              placeholder="비밀번호"
+              placeholder={copy.passwordPlaceholder}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              disabled={pendingAction !== null}
             />
+            <p className="auth-helper">{copy.passwordHint}</p>
             {error && <p className="error">{error}</p>}
-            <button type="submit" disabled={loading}>
-              {loading ? '가입 중...' : '가입하기'}
+            {notice && <p className="notice-text auth-notice">{notice}</p>}
+            <button type="submit" disabled={pendingAction !== null}>
+              {pendingAction === 'email' ? copy.signUpLoadingAction : copy.signUpPrimaryAction}
             </button>
+
+            <div className="auth-divider" aria-hidden="true">
+              <span>{copy.divider}</span>
+            </div>
+
+            <div className="auth-social-list">
+              <button
+                className="auth-social-button"
+                type="button"
+                onClick={() => handleSocialSignUp('google')}
+                disabled={pendingAction !== null || !googleEnabled}
+              >
+                <span className="auth-provider-mark">G</span>
+                <span className="auth-social-label">
+                  {pendingAction === 'google' ? copy.signUpSocialLoading : copy.continueWithGoogle}
+                </span>
+              </button>
+
+              <button
+                className={appleEnabled ? 'auth-social-button' : 'auth-social-button auth-social-button-disabled'}
+                type="button"
+                onClick={() => handleSocialSignUp('apple')}
+                disabled={pendingAction !== null || !appleEnabled}
+                aria-disabled={!appleEnabled}
+              >
+                <span className="auth-provider-mark">A</span>
+                <span className="auth-social-label">
+                  {pendingAction === 'apple' ? copy.signUpSocialLoading : copy.continueWithApple}
+                </span>
+                {!appleEnabled && <small className="auth-social-meta">{copy.appleDisabledLabel}</small>}
+              </button>
+            </div>
           </form>
 
           <Link className="auth-link" to="/login">
-            로그인으로 돌아가기
+            {copy.switchToLogin}
           </Link>
         </div>
       </div>

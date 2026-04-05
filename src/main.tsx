@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { AuthProvider } from './components/AuthProvider';
 import { LanguageProvider } from './i18n/LanguageContext';
 import './index.css';
 
@@ -9,10 +10,12 @@ import './index.css';
 // inside the root div. BrowserRouter provides client‑side routing.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <LanguageProvider>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </LanguageProvider>
+    <AuthProvider>
+      <LanguageProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </LanguageProvider>
+    </AuthProvider>
   </React.StrictMode>
 );

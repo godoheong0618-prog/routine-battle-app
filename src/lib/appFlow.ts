@@ -1,3 +1,4 @@
+import type { User } from '@supabase/supabase-js';
 import { ensureProfile } from './mvp';
 import { supabase } from '../supabaseClient';
 
@@ -23,13 +24,27 @@ export function hasDisplayName(value: string | null | undefined) {
   return Boolean(value?.trim());
 }
 
-export async function resolvePostAuthPath() {
+async function resolveUser(candidate?: User | null) {
+  if (candidate !== undefined) {
+    return candidate;
+  }
+
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
 
-  if (error || !user) {
+  if (error) {
+    return null;
+  }
+
+  return user;
+}
+
+export async function resolvePostAuthPath(candidate?: User | null) {
+  const user = await resolveUser(candidate);
+
+  if (!user) {
     return '/login';
   }
 
@@ -42,10 +57,10 @@ export async function resolvePostAuthPath() {
   }
 }
 
-export async function resolveInitialPath() {
+export async function resolveInitialPath(candidate?: User | null) {
   if (!hasSeenOnboarding()) {
     return '/onboarding';
   }
 
-  return resolvePostAuthPath();
+  return resolvePostAuthPath(candidate);
 }

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
+import AuthCallback from './pages/AuthCallback';
 import Battle from './pages/Battle';
 import CreateRoutine from './pages/CreateRoutine';
 import DisplayName from './pages/DisplayName';
@@ -16,6 +17,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Entry />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<SignUp />} />
       <Route path="/display-name" element={<DisplayName />} />
