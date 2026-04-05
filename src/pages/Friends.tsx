@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
+  formatBattlePairLabel,
+  formatUserCompanion,
+  formatUserLabel,
+} from '../lib/nameDisplay';
+import {
   FriendshipRow,
   ProfileRow,
   connectFriendByCode,
@@ -27,7 +32,7 @@ export default function Friends() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
 
   useEffect(() => {
     let active = true;
@@ -94,8 +99,14 @@ export default function Friends() {
     };
   }, [navigate, t]);
 
-  const friendName = friendProfile?.nickname || t('common.friend');
-  const profileName = profile?.nickname || t('common.me');
+  const friendName = formatUserLabel(friendProfile?.nickname, { locale, fallback: t('common.friend') });
+  const friendCompanion = formatUserCompanion(friendProfile?.nickname, { locale, fallback: t('common.friend') });
+  const defaultBattleTitle = formatBattlePairLabel({
+    locale,
+    leftName: profile?.nickname,
+    rightName: friendProfile?.nickname,
+    leftFallback: t('common.me'),
+  });
   const battleActionLabel = battleMeta?.battle_started_at ? t('friends.battleUpdateAction') : t('friends.battleSaveAction');
   const currentWager = battleMeta?.wager_text?.trim() || t('friends.noWager');
 
@@ -121,7 +132,11 @@ export default function Friends() {
       setBattleMeta(friendship);
       setBattleTitle(friendship?.battle_title ?? '');
       setWagerText(friendship?.wager_text ?? '');
-      setNotice(t('friends.connectSuccess', { name: connection.friendProfile.nickname || friendName }));
+      setNotice(
+        t('friends.connectSuccess', {
+          name: formatUserCompanion(connection.friendProfile.nickname, { locale, fallback: t('common.friend') }),
+        })
+      );
     } catch (connectError) {
       setError(connectError instanceof Error ? connectError.message : t('friends.loadError'));
     } finally {
@@ -147,7 +162,7 @@ export default function Friends() {
     const { data, error: updateError } = await supabase
       .from('friendships')
       .update({
-        battle_title: nextBattleTitle || `${profileName} vs ${friendName}`,
+        battle_title: nextBattleTitle || defaultBattleTitle,
         wager_text: nextWagerText || null,
         battle_status: 'active',
         battle_started_at: battleMeta.battle_started_at ?? new Date().toISOString(),
@@ -247,9 +262,7 @@ export default function Friends() {
               <div>
                 <h2>{t('friends.profileTitle')}</h2>
                 <p className="section-description">
-                  {friendProfile
-                    ? t('friends.profileConnectedBody', { name: friendName })
-                    : t('friends.profileEmptyBody')}
+                  {friendProfile ? t('friends.profileConnectedBody', { name: friendCompanion }) : t('friends.profileEmptyBody')}
                 </p>
               </div>
             </div>
@@ -261,12 +274,12 @@ export default function Friends() {
                   <div className="friend-copy">
                     <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
                     <h3>{friendName}</h3>
-                    <p>{t('friends.profileConnectedBody', { name: friendName })}</p>
+                    <p>{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
                   </div>
                 </div>
 
                 <div className="friend-profile-meta">
-                  <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || `${profileName} vs ${friendName}`}</span>
+                  <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || defaultBattleTitle}</span>
                   <span className="battle-meta-pill">{currentWager}</span>
                 </div>
 

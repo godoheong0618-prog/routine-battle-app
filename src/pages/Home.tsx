@@ -3,6 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
+  formatOpponentLabel,
+  formatOpponentSubject,
+  formatSelfLabel,
+  formatSelfSubject,
+  normalizeDisplayName,
+} from '../lib/nameDisplay';
+import {
   CheckinRow,
   FriendshipRow,
   ProfileRow,
@@ -33,15 +40,15 @@ type ToastState = {
 function getBattleHeadline({
   hasFriend,
   leader,
-  myName,
-  friendName,
+  myLeadName,
+  opponentLeadName,
   difference,
   t,
 }: {
   hasFriend: boolean;
   leader: 'me' | 'friend' | 'tied' | 'waiting';
-  myName: string;
-  friendName: string;
+  myLeadName: string;
+  opponentLeadName: string;
   difference: number;
   t: ReturnType<typeof useLanguage>['t'];
 }) {
@@ -55,13 +62,13 @@ function getBattleHeadline({
 
   if (leader === 'me') {
     return t('home.battleBarLeadMe', {
-      name: myName,
+      name: myLeadName,
       points: Math.abs(difference),
     });
   }
 
   return t('home.battleBarLeadFriend', {
-    name: friendName,
+    name: opponentLeadName,
     points: Math.abs(difference),
   });
 }
@@ -79,7 +86,7 @@ export default function Home() {
   const [pendingAction, setPendingAction] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
 
   const todayKey = useMemo(() => getTodayKey(), []);
   const todayDayKey = useMemo(() => getTodayDayKey(), []);
@@ -286,8 +293,11 @@ export default function Home() {
     };
   }, [navigate, t]);
 
-  const profileName = profile?.nickname || t('common.me');
-  const friendName = friendProfile?.nickname || t('common.friend');
+  const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('common.me') });
+  const friendLabel = formatOpponentLabel(friendProfile?.nickname, { locale });
+  const profileSubject = formatSelfSubject(profile?.nickname, { locale });
+  const friendSubject = formatOpponentSubject(friendProfile?.nickname, { locale });
+  const profileInitial = normalizeDisplayName(profile?.nickname).slice(0, 1).toUpperCase() || 'MY';
 
   const todayRoutines = useMemo(
     () => routines.filter((routine) => isRoutineVisibleToday(routine, todayDayKey)),
@@ -333,8 +343,8 @@ export default function Home() {
   const battleHeadline = getBattleHeadline({
     hasFriend: Boolean(friendProfile),
     leader: battleSummary.leader,
-    myName: profileName,
-    friendName,
+    myLeadName: profileSubject,
+    opponentLeadName: friendSubject,
     difference: battleSummary.difference,
     t,
   });
@@ -347,9 +357,9 @@ export default function Home() {
 
   const battleScoreLine = friendProfile
     ? t('home.battleBarScoreLine', {
-        me: profileName,
+        me: profileLabel,
         myScore: battleSummary.myScore,
-        friend: friendName,
+        friend: friendLabel,
         friendScore: battleSummary.friendScore,
       })
     : '';
@@ -519,7 +529,7 @@ export default function Home() {
             </div>
 
             <Link className="home-bell-button home-profile-shortcut" to="/mypage" aria-label={t('home.myPageAria')}>
-              {profile?.nickname?.slice(0, 1)?.toUpperCase() || 'MY'}
+              {profileInitial}
             </Link>
           </div>
 

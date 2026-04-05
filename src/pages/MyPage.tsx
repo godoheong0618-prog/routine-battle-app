@@ -5,6 +5,7 @@ import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Locale } from '../i18n/messages';
 import { getAuthCopy } from '../lib/auth';
+import { formatSelfLabel } from '../lib/nameDisplay';
 import { ProfileRow, SharedGoalCheckinRow, calculateStreak, ensureProfile } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -77,6 +78,7 @@ export default function MyPage() {
   const totalCompletions = personalCheckins.length + sharedCheckins.length;
   const streak = useMemo(() => calculateStreak(personalCheckins), [personalCheckins]);
   const authCopy = useMemo(() => getAuthCopy(locale), [locale]);
+  const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('my.profileFallback') });
 
   const handleLogout = async () => {
     const { error: signOutError } = await signOut();
@@ -112,7 +114,7 @@ export default function MyPage() {
           <section className="stats-grid">
             <article className="stat-card">
               <span>{t('my.profileLabel')}</span>
-              <strong>{profile?.nickname || t('my.profileFallback')}</strong>
+              <strong>{profileLabel}</strong>
             </article>
             <article className="stat-card">
               <span>{t('my.totalCompletionsLabel')}</span>

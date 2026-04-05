@@ -3,6 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
+  formatOpponentLabel,
+  formatOpponentSubject,
+  formatSelfLabel,
+  formatSelfSubject,
+} from '../lib/nameDisplay';
+import {
   CheckinRow,
   FriendshipRow,
   NudgeRow,
@@ -26,15 +32,15 @@ type SharedGoalView = SharedGoalRow & {
 function buildHeroTitle({
   hasFriend,
   leader,
-  myName,
-  friendName,
+  myLeadName,
+  opponentLeadName,
   difference,
   t,
 }: {
   hasFriend: boolean;
   leader: 'me' | 'friend' | 'tied' | 'waiting';
-  myName: string;
-  friendName: string;
+  myLeadName: string;
+  opponentLeadName: string;
   difference: number;
   t: ReturnType<typeof useLanguage>['t'];
 }) {
@@ -47,10 +53,10 @@ function buildHeroTitle({
   }
 
   if (leader === 'me') {
-    return t('battle.heroLeadMe', { name: myName, points: Math.abs(difference) });
+    return t('battle.heroLeadMe', { name: myLeadName, points: Math.abs(difference) });
   }
 
-  return t('battle.heroLeadFriend', { name: friendName, points: Math.abs(difference) });
+  return t('battle.heroLeadFriend', { name: opponentLeadName, points: Math.abs(difference) });
 }
 
 function buildStatusLabel(
@@ -112,7 +118,7 @@ export default function Battle() {
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState('');
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
   const todayKey = useMemo(() => getTodayKey(), []);
 
   useEffect(() => {
@@ -255,8 +261,18 @@ export default function Battle() {
     };
   }, [navigate, t]);
 
-  const profileName = profile?.nickname || t('common.me');
-  const friendName = friendProfile?.nickname || t('common.friend');
+  const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('common.me') });
+  const opponentLabel = formatOpponentLabel(friendProfile?.nickname, { locale });
+  const profileSubject = formatSelfSubject(profile?.nickname, { locale });
+  const opponentSubject = formatOpponentSubject(friendProfile?.nickname, { locale });
+  const sharedOpponentLabel = formatOpponentLabel(undefined, { locale });
+  const personalStatsLabel = locale === 'ko' ? `${profileLabel} 개인 완료` : `${profileLabel} personal completions`;
+  const opponentPersonalStatsLabel =
+    locale === 'ko' ? `${opponentLabel} 개인 완료` : `${opponentLabel} personal completions`;
+  const sharedStatsLabel =
+    locale === 'ko' ? `${profileLabel} 공동 목표 완료` : `${profileLabel} shared goal completions`;
+  const opponentSharedStatsLabel =
+    locale === 'ko' ? `${opponentLabel} 공동 목표 완료` : `${opponentLabel} shared goal completions`;
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -296,8 +312,8 @@ export default function Battle() {
   const heroTitle = buildHeroTitle({
     hasFriend: Boolean(friendProfile),
     leader: battleSummary.leader,
-    myName: profileName,
-    friendName,
+    myLeadName: profileSubject,
+    opponentLeadName: opponentSubject,
     difference: battleSummary.difference,
     t,
   });
@@ -435,7 +451,7 @@ export default function Battle() {
     }
 
     setNudges((current) => [data as NudgeRow, ...current].slice(0, 8));
-    setNotice(t('battle.nudgeSuccess', { name: friendName }));
+    setNotice(t('battle.nudgeSuccess', { name: opponentLabel }));
   };
 
   if (loading) {
@@ -489,9 +505,9 @@ export default function Battle() {
 
                 <div className="battle-hero-scoreline">
                   {t('battle.heroScoreLine', {
-                    me: profileName,
+                    me: profileLabel,
                     myScore: battleSummary.myScore,
-                    friend: friendName,
+                    friend: opponentLabel,
                     friendScore: battleSummary.friendScore,
                   })}
                 </div>
@@ -510,11 +526,11 @@ export default function Battle() {
 
               <section className="battle-score-strip">
                 <article className="score-panel">
-                  <span>{t('battle.scoreboardMe')}</span>
+                  <span>{profileLabel}</span>
                   <strong>{battleSummary.myScore}점</strong>
                 </article>
                 <article className="score-panel">
-                  <span>{t('battle.scoreboardFriend')}</span>
+                  <span>{opponentLabel}</span>
                   <strong>{battleSummary.friendScore}점</strong>
                 </article>
                 <article className="score-summary-card">
@@ -561,7 +577,7 @@ export default function Battle() {
                               goal.friendDoneToday ? 'shared-player-box shared-player-box-active' : 'shared-player-box'
                             }
                           >
-                            <span>{friendName}</span>
+                            <span>{sharedOpponentLabel}</span>
                             <strong>{goal.friendDoneToday ? t('battle.goalDone') : t('battle.goalWaiting')}</strong>
                           </div>
                         </div>
@@ -627,19 +643,19 @@ export default function Battle() {
 
                 <div className="battle-history-grid">
                   <article className="stat-card battle-history-card">
-                    <span>{t('battle.statPersonalMe')}</span>
+                    <span>{personalStatsLabel}</span>
                     <strong>{battleSummary.myPersonalActions}회</strong>
                   </article>
                   <article className="stat-card battle-history-card">
-                    <span>{t('battle.statPersonalFriend')}</span>
+                    <span>{opponentPersonalStatsLabel}</span>
                     <strong>{battleSummary.friendPersonalActions}회</strong>
                   </article>
                   <article className="stat-card battle-history-card">
-                    <span>{t('battle.statSharedMe')}</span>
+                    <span>{sharedStatsLabel}</span>
                     <strong>{battleSummary.mySharedCompletions}회</strong>
                   </article>
                   <article className="stat-card battle-history-card">
-                    <span>{t('battle.statSharedFriend')}</span>
+                    <span>{opponentSharedStatsLabel}</span>
                     <strong>{battleSummary.friendSharedCompletions}회</strong>
                   </article>
                   <article className="stat-card battle-history-card">
@@ -671,7 +687,7 @@ export default function Battle() {
                           <h3>
                             {nudge.sender_id === userId
                               ? t('battle.recentSentByMe')
-                              : t('battle.recentSentByFriend', { name: friendName })}
+                              : t('battle.recentSentByFriend', { name: opponentSubject })}
                           </h3>
                           <p>{nudge.message}</p>
                         </div>

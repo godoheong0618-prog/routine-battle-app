@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import BottomTabBar from '../components/BottomTabBar';
+import { useLanguage } from '../i18n/LanguageContext';
+import {
+  formatOpponentSubject,
+  formatUserCompanion,
+  formatUserLabel,
+  formatUserSubject,
+} from '../lib/nameDisplay';
 import {
   CheckinRow,
   NudgeRow,
@@ -13,12 +20,12 @@ import {
 import { supabase } from '../supabaseClient';
 
 type FeedItem = {
-  id: string;
-  title: string;
   description: string;
-  meta: string;
   emoji: string;
+  id: string;
+  meta: string;
   sortKey: string;
+  title: string;
 };
 
 export default function Feed() {
@@ -31,6 +38,7 @@ export default function Feed() {
   const [nudges, setNudges] = useState<NudgeRow[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const { locale } = useLanguage();
 
   useEffect(() => {
     let active = true;
@@ -126,6 +134,7 @@ export default function Feed() {
             }
           } catch (sharedCheckinsError) {
             console.warn('Feed optional shared goal checkins load failed:', sharedCheckinsError);
+
             if (active) {
               setSharedGoalCheckins([]);
             }
@@ -133,7 +142,13 @@ export default function Feed() {
         }
       } catch (loadError) {
         if (active) {
-          setError(loadError instanceof Error ? loadError.message : '피드 정보를 불러오지 못했어요.');
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : locale === 'ko'
+                ? '피드 정보를 불러오지 못했어요.'
+                : 'We could not load the feed.'
+          );
         }
       } finally {
         if (active) {
@@ -147,9 +162,21 @@ export default function Feed() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [locale]);
 
-  const friendName = friendProfile?.nickname || '친구';
+  const friendLabel = formatUserLabel(friendProfile?.nickname, {
+    locale,
+    fallback: locale === 'ko' ? '친구' : 'Friend',
+  });
+  const friendSubject = formatUserSubject(friendProfile?.nickname, {
+    locale,
+    fallback: locale === 'ko' ? '친구' : 'Friend',
+  });
+  const opponentSubject = formatOpponentSubject(friendProfile?.nickname, { locale });
+  const friendCompanion = formatUserCompanion(friendProfile?.nickname, {
+    locale,
+    fallback: locale === 'ko' ? '친구' : 'Friend',
+  });
 
   const feedItems = useMemo<FeedItem[]>(() => {
     if (!friendProfile) {
@@ -161,8 +188,13 @@ export default function Feed() {
 
     const personalItems = friendCheckins.map((checkin) => ({
       id: `routine-${checkin.routine_id}-${checkin.check_in_date}`,
-      title: `${friendName}가 개인 목표를 완료했어요`,
-      description: routineMap.get(checkin.routine_id) || '개인 루틴 완료',
+      title:
+        locale === 'ko'
+          ? `${friendSubject} 개인 목표를 완료했어요`
+          : `${friendLabel} completed a personal goal`,
+      description:
+        routineMap.get(checkin.routine_id) ||
+        (locale === 'ko' ? '개인 루틴 완료' : 'Completed a personal routine'),
       meta: checkin.check_in_date,
       emoji: '✓',
       sortKey: `${checkin.check_in_date}T12:00:00`,
@@ -172,30 +204,55 @@ export default function Feed() {
       id: `shared-${checkin.goal_id}-${checkin.user_id}-${checkin.check_date}`,
       title:
         checkin.user_id === profile?.id
-          ? '내가 공동 목표를 체크했어요'
-          : `${friendName}가 공동 목표를 체크했어요`,
-      description: goalMap.get(checkin.goal_id) || '공동 목표 진행',
+          ? locale === 'ko'
+            ? '내가 공동 목표를 체크했어요'
+            : 'You checked a shared goal'
+          : locale === 'ko'
+            ? `${friendSubject} 공동 목표를 체크했어요`
+            : `${friendLabel} checked a shared goal`,
+      description:
+        goalMap.get(checkin.goal_id) ||
+        (locale === 'ko' ? '공동 목표 진행' : 'Shared goal progress'),
       meta: checkin.check_date,
-      emoji: '🏁',
+      emoji: '◎',
       sortKey: `${checkin.check_date}T13:00:00`,
     }));
 
     const nudgeItems = nudges.map((nudge) => ({
       id: nudge.id,
-      title: nudge.sender_id === profile?.id ? '내가 친구를 찔렀어요' : `${friendName}가 나를 찔렀어요`,
+      title:
+        nudge.sender_id === profile?.id
+          ? locale === 'ko'
+            ? '친구를 찔렀어요'
+            : 'You nudged your friend'
+          : locale === 'ko'
+            ? `${opponentSubject} 나를 찔렀어요`
+            : `${friendLabel} nudged you`,
       description: nudge.message,
-      meta: new Date(nudge.created_at).toLocaleDateString('ko-KR'),
+      meta: new Date(nudge.created_at).toLocaleDateString(locale === 'ko' ? 'ko-KR' : 'en-US'),
       emoji: '!',
       sortKey: nudge.created_at,
     }));
 
     return [...personalItems, ...sharedItems, ...nudgeItems].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
-  }, [friendCheckins, friendName, friendProfile, friendRoutines, nudges, profile?.id, sharedGoalCheckins, sharedGoals]);
+  }, [
+    locale,
+    friendCheckins,
+    friendLabel,
+    friendProfile,
+    friendRoutines,
+    friendSubject,
+    nudges,
+    opponentSubject,
+    profile?.id,
+    sharedGoalCheckins,
+    sharedGoals,
+  ]);
 
   if (loading) {
     return (
       <div className="mobile-shell">
-        <div className="app-screen loading-screen">불러오는 중...</div>
+        <div className="app-screen loading-screen">{locale === 'ko' ? '불러오는 중...' : 'Loading...'}</div>
       </div>
     );
   }
@@ -205,8 +262,12 @@ export default function Feed() {
       <div className="app-screen subpage-screen">
         <header className="subpage-header">
           <p className="section-eyebrow">Feed</p>
-          <h1>최근 활동 피드</h1>
-          <p>데모 데이터 없이 실제 친구와 주고받은 활동만 보여줘요.</p>
+          <h1>{locale === 'ko' ? '최근 활동 피드' : 'Recent activity'}</h1>
+          <p>
+            {locale === 'ko'
+              ? '메모 없이도 친구와 주고받은 활동 흐름을 가볍게 볼 수 있어요.'
+              : 'See the flow of shared activity with your friend at a glance.'}
+          </p>
         </header>
 
         <main className="subpage-content">
@@ -214,13 +275,21 @@ export default function Feed() {
 
           {!friendProfile ? (
             <article className="empty-state-card">
-              <h3>연결된 친구가 아직 없어요</h3>
-              <p>친구를 연결하면 완료 기록, 찌르기, 공동 목표 진행 상황이 여기에 표시돼요.</p>
+              <h3>{locale === 'ko' ? '연결된 친구가 아직 없어요' : 'No friend connected yet'}</h3>
+              <p>
+                {locale === 'ko'
+                  ? '친구를 연결하면 완료 기록, 찌르기, 공동 목표 진행이 여기에 쌓여요.'
+                  : 'Once you connect a friend, completions, nudges, and shared goals will show up here.'}
+              </p>
             </article>
           ) : feedItems.length === 0 ? (
             <article className="empty-state-card">
-              <h3>아직 표시할 활동이 없어요</h3>
-              <p>{friendName}와 활동을 시작하면 실제 기록이 피드에 쌓여요.</p>
+              <h3>{locale === 'ko' ? '아직 표시할 활동이 없어요' : 'Nothing to show yet'}</h3>
+              <p>
+                {locale === 'ko'
+                  ? `${friendCompanion} 활동을 시작하면 실제 기록이 피드에 쌓여요.`
+                  : `Start an activity with ${friendLabel} and the feed will fill up here.`}
+              </p>
             </article>
           ) : (
             <div className="feed-list">
