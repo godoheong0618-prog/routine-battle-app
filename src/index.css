@@ -999,12 +999,21 @@ h3 {
   margin-top: 28px;
 }
 
+.field-group {
+  display: grid;
+  align-items: start;
+  gap: 8px;
+}
+
 .onboarding-label,
-.field-group span {
+.field-group > span {
   display: block;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #666666;
+  margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
 }
 
 .onboarding-nickname-input,
@@ -1016,14 +1025,28 @@ h3 {
   width: 100%;
   background: #f5f5f4;
   border-radius: 18px;
-  padding: 16px 18px;
+  padding: 14px 16px;
   color: #121212;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .field-group textarea,
 .invite-card textarea {
   resize: vertical;
   min-height: 120px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  line-height: 1.55;
+}
+
+.field-group input::placeholder,
+.field-group textarea::placeholder,
+.field-group select::placeholder,
+.invite-card input::placeholder,
+.invite-card textarea::placeholder {
+  color: #8f877d;
+  opacity: 1;
 }
 
 .onboarding-footer {
@@ -1146,8 +1169,8 @@ h3 {
 
 .field-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 16px;
   margin-top: 16px;
 }
 
@@ -2055,6 +2078,11 @@ h3 {
     padding: 18px;
   }
 
+  .field-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
   .summary-chip-row,
   .stats-grid {
     gap: 14px;
@@ -2234,5 +2262,175 @@ h3 {
     left: 16px;
     right: 16px;
     bottom: 142px;
+  }
+}
+
+@media (max-width: 560px) {
+  .create-screen {
+    padding: 18px 14px 24px;
+  }
+
+  .page-topbar {
+    margin-bottom: 16px;
+  }
+
+  .create-hero {
+    padding: 2px 2px 0;
+  }
+
+  .create-hero h1,
+  .subpage-header h1 {
+    margin-top: 8px;
+    font-size: 22px;
+    line-height: 1.16;
+    letter-spacing: -0.035em;
+    word-break: keep-all;
+    text-wrap: balance;
+  }
+
+  .create-hero p,
+  .subpage-header p,
+  .section-description,
+  .friend-copy p,
+  .empty-state-card p,
+  .friend-code-card p {
+    line-height: 1.52;
+    max-width: 36ch;
+    text-wrap: pretty;
+  }
+
+  .subpage-header {
+    padding: 20px 14px 4px;
+  }
+
+  .subpage-content {
+    padding: 18px 14px 116px;
+  }
+
+  .section-block {
+    margin-top: 22px;
+  }
+
+  .form-card,
+  .scheduler-card,
+  .preview-card,
+  .invite-card,
+  .empty-state-card,
+  .friend-profile-card {
+    padding: 14px;
+  }
+
+  .form-card {
+    margin-top: 14px;
+    border-radius: 24px;
+  }
+
+  .scheduler-card,
+  .preview-card,
+  .invite-card,
+  .empty-state-card,
+  .friend-profile-card {
+    border-radius: 20px;
+  }
+
+  .field-group {
+    gap: 7px;
+  }
+
+  .onboarding-label,
+  .field-group > span {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .onboarding-nickname-input,
+  .field-group input,
+  .field-group textarea,
+  .field-group select,
+  .invite-card input,
+  .invite-card textarea,
+  .invite-card button,
+  .form-card .primary-button {
+    min-height: 44px;
+    border-radius: 16px;
+  }
+
+  .field-group input,
+  .field-group textarea,
+  .field-group select,
+  .invite-card input,
+  .invite-card textarea {
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .field-group textarea,
+  .invite-card textarea {
+    min-height: 108px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 14px;
+  }
+
+  .field-group + .field-group,
+  .preview-card,
+  .form-card .primary-button {
+    margin-top: 14px;
+  }
+
+  .repeat-toggle {
+    gap: 8px;
+  }
+
+  .repeat-option,
+  .weekday-chip {
+    min-height: 44px;
+    border-radius: 14px;
+  }
+
+  .weekday-grid {
+    gap: 6px;
+  }
+
+  .friend-code-card h3 {
+    font-size: 20px;
+    line-height: 1.18;
+  }
+
+  .friend-profile-header {
+    gap: 12px;
+  }
+
+  .friend-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    font-size: 18px;
+  }
+
+  .friend-copy h3,
+  .empty-state-card h3 {
+    line-height: 1.28;
+  }
+
+  .friend-profile-meta {
+    margin-top: 14px;
+    gap: 6px;
+  }
+
+  .battle-meta-pill {
+    min-height: 30px;
+    padding: 0 10px;
+  }
+
+  .invite-card .primary-button,
+  .friend-profile-card .inline-action-link {
+    width: 100%;
   }
 }
