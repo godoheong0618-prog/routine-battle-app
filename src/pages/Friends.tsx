@@ -331,36 +331,38 @@ export default function Friends() {
             </div>
 
             {friendProfile ? (
-              <article className="friend-profile-card friend-management-card">
-                <div className="friend-profile-card-top">
-                  <div className="friend-profile-header">
-                    <div className="friend-avatar">VS</div>
-                    <div className="friend-copy">
-                      <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
-                      <h3>{friendName}</h3>
-                      <p>{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
+              <article className="friend-profile-card friend-management-card friend-management-card-outer">
+                <div className="friend-card-inner friend-profile-panel">
+                  <div className="friend-profile-card-top">
+                    <div className="friend-profile-header">
+                      <div className="friend-avatar">VS</div>
+                      <div className="friend-copy">
+                        <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
+                        <h3>{friendName}</h3>
+                        <p>{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
+                      </div>
                     </div>
+
+                    <details className="task-menu friend-card-menu">
+                      <summary className="task-menu-trigger" aria-label={friendMenuLabel}>
+                        <span />
+                        <span />
+                        <span />
+                      </summary>
+
+                      <div className="task-menu-popover">
+                        <button className="task-menu-item task-menu-item-danger" type="button" onClick={handleOpenDisconnect}>
+                          {disconnectActionLabel}
+                        </button>
+                      </div>
+                    </details>
                   </div>
 
-                  <details className="task-menu friend-card-menu">
-                    <summary className="task-menu-trigger" aria-label={friendMenuLabel}>
-                      <span />
-                      <span />
-                      <span />
-                    </summary>
-
-                    <div className="task-menu-popover">
-                      <button className="task-menu-item task-menu-item-danger" type="button" onClick={handleOpenDisconnect}>
-                        {disconnectActionLabel}
-                      </button>
-                    </div>
-                  </details>
-                </div>
-
-                <div className="friend-profile-meta">
-                  <span className="battle-meta-pill">{battleStateLabel}</span>
-                  <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || defaultBattleTitle}</span>
-                  <span className="battle-meta-pill">{currentWager}</span>
+                  <div className="friend-profile-meta">
+                    <span className="battle-meta-pill">{battleStateLabel}</span>
+                    <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || defaultBattleTitle}</span>
+                    <span className="battle-meta-pill">{currentWager}</span>
+                  </div>
                 </div>
 
                 <div className="friend-profile-actions">
@@ -376,9 +378,11 @@ export default function Friends() {
                 </div>
               </article>
             ) : (
-              <article className="empty-state-card friend-management-card">
-                <h3>{t('friends.profileEmptyTitle')}</h3>
-                <p>{t('friends.profileEmptyBody')}</p>
+              <article className="empty-state-card friend-management-card friend-management-card-outer">
+                <div className="friend-card-inner friend-note-panel">
+                  <h3>{t('friends.profileEmptyTitle')}</h3>
+                  <p>{t('friends.profileEmptyBody')}</p>
+                </div>
               </article>
             )}
           </section>
@@ -395,34 +399,36 @@ export default function Friends() {
 
             <form
               id="battle-setup-card"
-              className="invite-card battle-setup-form friend-management-card"
+              className="invite-card battle-setup-form friend-management-card friend-management-card-outer"
               onSubmit={handleSaveBattleSetup}
             >
-              <label className="field-group" htmlFor="battle-title">
-                <span>{t('friends.battleTitleLabel')}</span>
-                <input
-                  id="battle-title"
-                  type="text"
-                  placeholder={t('friends.battleTitlePlaceholder')}
-                  value={battleTitle}
-                  onChange={(event) => setBattleTitle(event.target.value)}
-                  maxLength={50}
-                  disabled={!friendProfile || savingBattle}
-                />
-              </label>
+              <div className="friend-card-inner friend-battle-form-panel">
+                <label className="field-group" htmlFor="battle-title">
+                  <span>{t('friends.battleTitleLabel')}</span>
+                  <input
+                    id="battle-title"
+                    type="text"
+                    placeholder={t('friends.battleTitlePlaceholder')}
+                    value={battleTitle}
+                    onChange={(event) => setBattleTitle(event.target.value)}
+                    maxLength={50}
+                    disabled={!friendProfile || savingBattle}
+                  />
+                </label>
 
-              <label className="field-group" htmlFor="battle-wager">
-                <span>{t('friends.wagerLabel')}</span>
-                <input
-                  id="battle-wager"
-                  type="text"
-                  placeholder={t('friends.wagerPlaceholder')}
-                  value={wagerText}
-                  onChange={(event) => setWagerText(event.target.value)}
-                  maxLength={60}
-                  disabled={!friendProfile || savingBattle}
-                />
-              </label>
+                <label className="field-group" htmlFor="battle-wager">
+                  <span>{t('friends.wagerLabel')}</span>
+                  <input
+                    id="battle-wager"
+                    type="text"
+                    placeholder={t('friends.wagerPlaceholder')}
+                    value={wagerText}
+                    onChange={(event) => setWagerText(event.target.value)}
+                    maxLength={60}
+                    disabled={!friendProfile || savingBattle}
+                  />
+                </label>
+              </div>
 
               <button className="primary-button" type="submit" disabled={!friendProfile || !battleMeta || savingBattle}>
                 {savingBattle ? t('home.saving') : battleActionLabel}

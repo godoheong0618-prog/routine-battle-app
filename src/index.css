@@ -2094,15 +2094,15 @@ h3 {
 }
 
 .friends-content .section-block {
-  margin-top: 28px;
+  margin-top: 34px;
 }
 
 .friends-content .section-block:first-child {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .friends-content .section-header {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .friends-content .section-description {
@@ -2119,14 +2119,14 @@ h3 {
 .friend-management-card-outer {
   margin-top: 0;
   display: grid;
-  gap: 18px;
-  padding: 20px;
+  gap: 20px;
+  padding: 22px;
 }
 
 .friend-card-inner {
   border-radius: var(--radius-card-sm);
-  border: 1px solid rgba(36, 29, 20, 0.05);
-  background: var(--surface-muted);
+  border: 1px solid rgba(36, 29, 20, 0.045);
+  background: #f8f5f0;
   padding: 16px;
 }
 
@@ -2172,6 +2172,25 @@ h3 {
 
 .friend-note-panel p {
   margin-top: 0;
+}
+
+.friend-profile-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.friend-battle-form-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.friends-screen .friend-battle-form-panel input {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(36, 29, 20, 0.06);
+  box-shadow: none;
 }
 
 .friend-profile-card-top {
@@ -2627,7 +2646,7 @@ h3 {
   }
 
   .friends-content .section-block {
-    margin-top: 24px;
+    margin-top: 28px;
   }
 
   .friends-content .section-header {
@@ -2635,8 +2654,8 @@ h3 {
   }
 
   .friends-screen .friend-management-card-outer {
-    gap: 16px;
-    padding: 18px;
+    gap: 18px;
+    padding: 19px;
   }
 
   .friends-screen .friend-card-inner {
@@ -2654,6 +2673,15 @@ h3 {
 
   .friends-screen .friend-form-stack input,
   .friends-screen .friend-form-stack .primary-button {
+    min-height: 46px;
+    border-radius: 16px;
+  }
+
+  .friends-screen .friend-battle-form-panel {
+    gap: 12px;
+  }
+
+  .friends-screen .friend-battle-form-panel input {
     min-height: 46px;
     border-radius: 16px;
   }
