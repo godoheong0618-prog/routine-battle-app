@@ -17,8 +17,8 @@ import {
   SharedGoalRow,
   calculateBattleScores,
   ensureProfile,
-  fetchFriendshipByUsers,
-  fetchProfile,
+  fetchFriendConnection,
+  filterSharedGoalsForPair,
   getTodayKey,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
@@ -119,6 +119,7 @@ export default function Battle() {
   const [pendingAction, setPendingAction] = useState('');
   const navigate = useNavigate();
   const { locale, t } = useLanguage();
+  const isKo = locale === 'ko';
   const todayKey = useMemo(() => getTodayKey(), []);
 
   useEffect(() => {
@@ -139,107 +140,94 @@ export default function Battle() {
 
       try {
         const ensuredProfile = await ensureProfile(user);
+        const connection = await fetchFriendConnection(ensuredProfile);
 
         if (!active) {
           return;
         }
 
-        setProfile(ensuredProfile);
+        setProfile(connection.profile);
+        setFriendProfile(connection.friendProfile);
+        setBattleMeta(connection.friendship);
 
-        const connectedFriend = await fetchProfile(ensuredProfile.friend_id);
-
-        if (!active) {
+        if (!connection.friendProfile) {
+          setCheckins([]);
+          setSharedGoals([]);
+          setSharedGoalCheckins([]);
+          setNudges([]);
+          setLoading(false);
           return;
         }
 
-        setFriendProfile(connectedFriend);
+        const relatedUserIds = [user.id, connection.friendProfile.id];
 
-        const friendship = await fetchFriendshipByUsers(user.id, connectedFriend?.id ?? null);
+        const { data: checkinData, error: checkinError } = await supabase
+          .from('checkins')
+          .select('user_id, routine_id, check_in_date')
+          .in('user_id', relatedUserIds);
+
+        if (checkinError) {
+          throw checkinError;
+        }
 
         if (active) {
-          setBattleMeta(friendship);
+          setCheckins((checkinData as CheckinRow[]) ?? []);
         }
 
-        const relatedUserIds = connectedFriend ? [user.id, connectedFriend.id] : [user.id];
+        const { data: sharedGoalData, error: sharedGoalError } = await supabase
+          .from('shared_goals')
+          .select('*')
+          .or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`)
+          .order('created_at', { ascending: false });
 
-        const [checkinsResult, sharedGoalsResult] = await Promise.allSettled([
-          supabase.from('checkins').select('user_id, routine_id, check_in_date').in('user_id', relatedUserIds),
-          supabase
-            .from('shared_goals')
-            .select('*')
-            .or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`)
-            .order('created_at', { ascending: false }),
-        ]);
-
-        let loadedSharedGoals: SharedGoalRow[] = [];
-
-        if (checkinsResult.status === 'fulfilled' && !checkinsResult.value.error) {
-          setCheckins((checkinsResult.value.data as CheckinRow[]) ?? []);
-        } else {
-          console.warn('Battle checkins load failed:', checkinsResult);
+        if (sharedGoalError) {
+          throw sharedGoalError;
         }
 
-        if (sharedGoalsResult.status === 'fulfilled' && !sharedGoalsResult.value.error) {
-          loadedSharedGoals = (sharedGoalsResult.value.data as SharedGoalRow[]) ?? [];
-          setSharedGoals(loadedSharedGoals);
-        } else {
-          console.warn('Battle shared goals load failed:', sharedGoalsResult);
+        const filteredGoals = filterSharedGoalsForPair(
+          (sharedGoalData as SharedGoalRow[]) ?? [],
+          user.id,
+          connection.friendProfile.id
+        );
+
+        if (active) {
+          setSharedGoals(filteredGoals);
         }
 
-        if (loadedSharedGoals.length > 0) {
-          try {
-            const goalIds = loadedSharedGoals.map((goal) => goal.id);
-            const { data, error: sharedCheckinsError } = await supabase
-              .from('shared_goal_checkins')
-              .select('goal_id, user_id, check_date')
-              .in('goal_id', goalIds)
-              .in('user_id', relatedUserIds);
+        if (filteredGoals.length > 0) {
+          const goalIds = filteredGoals.map((goal) => goal.id);
+          const { data: sharedCheckins, error: sharedCheckinsError } = await supabase
+            .from('shared_goal_checkins')
+            .select('goal_id, user_id, check_date')
+            .in('goal_id', goalIds)
+            .in('user_id', relatedUserIds);
 
-            if (sharedCheckinsError) {
-              throw sharedCheckinsError;
-            }
+          if (sharedCheckinsError) {
+            throw sharedCheckinsError;
+          }
 
-            if (active) {
-              setSharedGoalCheckins((data as SharedGoalCheckinRow[]) ?? []);
-            }
-          } catch (sharedCheckinsError) {
-            console.warn('Battle shared goal checkins load failed:', sharedCheckinsError);
-
-            if (active) {
-              setSharedGoalCheckins([]);
-            }
+          if (active) {
+            setSharedGoalCheckins((sharedCheckins as SharedGoalCheckinRow[]) ?? []);
           }
         } else if (active) {
           setSharedGoalCheckins([]);
         }
 
-        if (connectedFriend) {
-          try {
-            const { data, error: nudgeError } = await supabase
-              .from('nudges')
-              .select('id, sender_id, receiver_id, message, created_at')
-              .or(
-                `and(sender_id.eq.${user.id},receiver_id.eq.${connectedFriend.id}),and(sender_id.eq.${connectedFriend.id},receiver_id.eq.${user.id})`
-              )
-              .order('created_at', { ascending: false })
-              .limit(8);
+        const { data: nudgeData, error: nudgeError } = await supabase
+          .from('nudges')
+          .select('id, sender_id, receiver_id, message, created_at')
+          .or(
+            `and(sender_id.eq.${user.id},receiver_id.eq.${connection.friendProfile.id}),and(sender_id.eq.${connection.friendProfile.id},receiver_id.eq.${user.id})`
+          )
+          .order('created_at', { ascending: false })
+          .limit(8);
 
-            if (nudgeError) {
-              throw nudgeError;
-            }
+        if (nudgeError) {
+          throw nudgeError;
+        }
 
-            if (active) {
-              setNudges((data as NudgeRow[]) ?? []);
-            }
-          } catch (nudgeError) {
-            console.warn('Battle nudges load failed:', nudgeError);
-
-            if (active) {
-              setNudges([]);
-            }
-          }
-        } else if (active) {
-          setNudges([]);
+        if (active) {
+          setNudges((nudgeData as NudgeRow[]) ?? []);
         }
       } catch (loadError) {
         console.warn('Battle load failed:', loadError);
@@ -266,13 +254,10 @@ export default function Battle() {
   const profileSubject = formatSelfSubject(profile?.nickname, { locale });
   const opponentSubject = formatOpponentSubject(friendProfile?.nickname, { locale });
   const sharedOpponentLabel = formatOpponentLabel(undefined, { locale });
-  const personalStatsLabel = locale === 'ko' ? `${profileLabel} 개인 완료` : `${profileLabel} personal completions`;
-  const opponentPersonalStatsLabel =
-    locale === 'ko' ? `${opponentLabel} 개인 완료` : `${opponentLabel} personal completions`;
-  const sharedStatsLabel =
-    locale === 'ko' ? `${profileLabel} 공동 목표 완료` : `${profileLabel} shared goal completions`;
-  const opponentSharedStatsLabel =
-    locale === 'ko' ? `${opponentLabel} 공동 목표 완료` : `${opponentLabel} shared goal completions`;
+  const personalStatsLabel = isKo ? `${profileLabel} 개인 완료` : `${profileLabel} personal completions`;
+  const opponentPersonalStatsLabel = isKo ? `${opponentLabel} 개인 완료` : `${opponentLabel} personal completions`;
+  const sharedStatsLabel = isKo ? `${profileLabel} 공동 목표 완료` : `${profileLabel} shared goal completions`;
+  const opponentSharedStatsLabel = isKo ? `${opponentLabel} 공동 목표 완료` : `${opponentLabel} shared goal completions`;
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -323,14 +308,21 @@ export default function Battle() {
   const battleWager = battleMeta?.wager_text?.trim()
     ? t('battle.heroWager', { text: battleMeta.wager_text.trim() })
     : t('battle.heroNoWager');
+  const hasBattleStarted = Boolean(friendProfile && battleMeta?.battle_started_at);
+  const battleSetupTitle = isKo ? `${opponentLabel}와 배틀 준비만 남았어요` : `You are almost ready to battle ${opponentLabel}`;
+  const battleSetupBody = isKo
+    ? '친구 탭에서 배틀 이름과 내기를 저장하면 점수판과 공동 목표가 여기 바로 열려요.'
+    : 'Save the battle name and wager in Friends to open the scoreboard and shared goals here.';
+  const battleSetupAction = isKo ? '친구 탭에서 설정하기' : 'Set up in Friends';
+  const scoreSuffix = isKo ? '점' : 'pts';
 
   const handleCreateSharedGoal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
     setNotice('');
 
-    if (!friendProfile || !userId) {
-      setNotice(t('battle.noFriendBody'));
+    if (!friendProfile || !userId || !hasBattleStarted) {
+      setNotice(hasBattleStarted ? t('battle.noFriendBody') : battleSetupBody);
       return;
     }
 
@@ -367,8 +359,8 @@ export default function Battle() {
   };
 
   const handleToggleSharedGoal = async (goalId: string) => {
-    if (!userId || !friendProfile) {
-      setNotice(t('battle.noFriendBody'));
+    if (!userId || !friendProfile || !hasBattleStarted) {
+      setNotice(hasBattleStarted ? t('battle.noFriendBody') : battleSetupBody);
       return;
     }
 
@@ -425,14 +417,12 @@ export default function Battle() {
   };
 
   const handleSendNudge = async (goalTitle?: string) => {
-    if (!userId || !friendProfile) {
-      setNotice(t('battle.noFriendBody'));
+    if (!userId || !friendProfile || !hasBattleStarted) {
+      setNotice(hasBattleStarted ? t('battle.noFriendBody') : battleSetupBody);
       return;
     }
 
-    const message = goalTitle
-      ? t('battle.nudgeMessageWithGoal', { title: goalTitle })
-      : t('battle.nudgeMessageDefault');
+    const message = goalTitle ? t('battle.nudgeMessageWithGoal', { title: goalTitle }) : t('battle.nudgeMessageDefault');
 
     const { data, error: nudgeError } = await supabase
       .from('nudges')
@@ -483,6 +473,14 @@ export default function Battle() {
                 {t('battle.openFriends')}
               </Link>
             </article>
+          ) : !hasBattleStarted ? (
+            <article className="empty-state-card">
+              <h3>{battleSetupTitle}</h3>
+              <p>{battleSetupBody}</p>
+              <Link className="inline-action-link" to="/friends">
+                {battleSetupAction}
+              </Link>
+            </article>
           ) : (
             <>
               <section
@@ -527,11 +525,11 @@ export default function Battle() {
               <section className="battle-score-strip">
                 <article className="score-panel">
                   <span>{profileLabel}</span>
-                  <strong>{battleSummary.myScore}점</strong>
+                  <strong>{`${battleSummary.myScore} ${scoreSuffix}`}</strong>
                 </article>
                 <article className="score-panel">
                   <span>{opponentLabel}</span>
-                  <strong>{battleSummary.friendScore}점</strong>
+                  <strong>{`${battleSummary.friendScore} ${scoreSuffix}`}</strong>
                 </article>
                 <article className="score-summary-card">
                   <span>{t('battle.scoreboardBonus')}</span>
@@ -644,19 +642,19 @@ export default function Battle() {
                 <div className="battle-history-grid">
                   <article className="stat-card battle-history-card">
                     <span>{personalStatsLabel}</span>
-                    <strong>{battleSummary.myPersonalActions}회</strong>
+                    <strong>{battleSummary.myPersonalActions}</strong>
                   </article>
                   <article className="stat-card battle-history-card">
                     <span>{opponentPersonalStatsLabel}</span>
-                    <strong>{battleSummary.friendPersonalActions}회</strong>
+                    <strong>{battleSummary.friendPersonalActions}</strong>
                   </article>
                   <article className="stat-card battle-history-card">
                     <span>{sharedStatsLabel}</span>
-                    <strong>{battleSummary.mySharedCompletions}회</strong>
+                    <strong>{battleSummary.mySharedCompletions}</strong>
                   </article>
                   <article className="stat-card battle-history-card">
                     <span>{opponentSharedStatsLabel}</span>
-                    <strong>{battleSummary.friendSharedCompletions}회</strong>
+                    <strong>{battleSummary.friendSharedCompletions}</strong>
                   </article>
                   <article className="stat-card battle-history-card">
                     <span>{t('battle.statBonus')}</span>

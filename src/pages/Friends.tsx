@@ -1,25 +1,25 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, MouseEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
-import {
-  formatBattlePairLabel,
-  formatUserCompanion,
-  formatUserLabel,
-} from '../lib/nameDisplay';
+import { formatBattlePairLabel, formatUserCompanion, formatUserLabel } from '../lib/nameDisplay';
 import {
   FriendshipRow,
   ProfileRow,
   connectFriendByCode,
+  disconnectFriendConnection,
   ensureProfile,
-  fetchFriendshipByUsers,
-  fetchProfile,
+  fetchFriendConnection,
   normalizeFriendCode,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
+type ToastState = {
+  id: number;
+  message: string;
+};
+
 export default function Friends() {
-  const [userId, setUserId] = useState('');
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
   const [battleMeta, setBattleMeta] = useState<FriendshipRow | null>(null);
@@ -29,22 +29,45 @@ export default function Friends() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [savingBattle, setSavingBattle] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [toast, setToast] = useState<ToastState | null>(null);
   const navigate = useNavigate();
   const { locale, t } = useLanguage();
+  const isKo = locale === 'ko';
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 2600);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     let active = true;
 
-    const syncBattleInputs = (friendship: FriendshipRow | null) => {
+    const syncConnectionState = (
+      nextProfile: ProfileRow | null,
+      nextFriendProfile: ProfileRow | null,
+      nextFriendship: FriendshipRow | null
+    ) => {
       if (!active) {
         return;
       }
 
-      setBattleMeta(friendship);
-      setBattleTitle(friendship?.battle_title ?? '');
-      setWagerText(friendship?.wager_text ?? '');
+      setProfile(nextProfile);
+      setFriendProfile(nextFriendProfile);
+      setBattleMeta(nextFriendship);
+      setBattleTitle(nextFriendship?.battle_title ?? '');
+      setWagerText(nextFriendship?.wager_text ?? '');
     };
 
     const loadFriends = async () => {
@@ -58,27 +81,10 @@ export default function Friends() {
         return;
       }
 
-      setUserId(user.id);
-
       try {
         const ensuredProfile = await ensureProfile(user);
-
-        if (!active) {
-          return;
-        }
-
-        setProfile(ensuredProfile);
-
-        const connectedFriend = await fetchProfile(ensuredProfile.friend_id);
-
-        if (!active) {
-          return;
-        }
-
-        setFriendProfile(connectedFriend);
-
-        const friendship = await fetchFriendshipByUsers(user.id, connectedFriend?.id ?? null);
-        syncBattleInputs(friendship);
+        const connection = await fetchFriendConnection(ensuredProfile);
+        syncConnectionState(connection.profile, connection.friendProfile, connection.friendship);
       } catch (loadError) {
         console.warn('Friends load failed:', loadError);
 
@@ -99,6 +105,22 @@ export default function Friends() {
     };
   }, [navigate, t]);
 
+  const showToast = (message: string) => {
+    setToast({ id: Date.now(), message });
+  };
+
+  const syncConnectionState = (
+    nextProfile: ProfileRow | null,
+    nextFriendProfile: ProfileRow | null,
+    nextFriendship: FriendshipRow | null
+  ) => {
+    setProfile(nextProfile);
+    setFriendProfile(nextFriendProfile);
+    setBattleMeta(nextFriendship);
+    setBattleTitle(nextFriendship?.battle_title ?? '');
+    setWagerText(nextFriendship?.wager_text ?? '');
+  };
+
   const friendName = formatUserLabel(friendProfile?.nickname, { locale, fallback: t('common.friend') });
   const friendCompanion = formatUserCompanion(friendProfile?.nickname, { locale, fallback: t('common.friend') });
   const defaultBattleTitle = formatBattlePairLabel({
@@ -107,13 +129,25 @@ export default function Friends() {
     rightName: friendProfile?.nickname,
     leftFallback: t('common.me'),
   });
-  const battleActionLabel = battleMeta?.battle_started_at ? t('friends.battleUpdateAction') : t('friends.battleSaveAction');
+  const hasBattleStarted = Boolean(friendProfile && battleMeta?.battle_started_at);
+  const battleActionLabel = hasBattleStarted ? t('friends.battleUpdateAction') : t('friends.battleSaveAction');
   const currentWager = battleMeta?.wager_text?.trim() || t('friends.noWager');
+  const friendMenuLabel = isKo ? `${friendName} 메뉴` : `${friendName} menu`;
+  const battleStateLabel = hasBattleStarted ? (isKo ? '배틀 진행 중' : 'Battle live') : isKo ? '배틀 준비 중' : 'Battle draft';
+  const disconnectTitle = isKo ? '친구 연결을 해제할까요?' : 'Remove this friend connection?';
+  const disconnectDescription = isKo
+    ? '진행 중인 배틀과 공동 목표가 더 이상 표시되지 않을 수 있어요.'
+    : 'Current battle summaries and shared goals may stop appearing.';
+  const disconnectActionLabel = isKo ? '친구 끊기' : 'Remove friend';
+  const disconnectSuccessMessage = isKo ? '친구 연결이 해제되었어요.' : 'Friend connection removed.';
+  const disconnectErrorMessage = isKo
+    ? '친구 연결을 해제하지 못했어요. 잠시 후 다시 시도해 주세요.'
+    : 'Could not remove the friend connection. Please try again.';
+  const setupActionLabel = isKo ? '배틀 준비하기' : 'Set up battle';
 
   const handleConnectFriend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
-    setNotice('');
 
     if (!profile) {
       setError(t('friends.loadError'));
@@ -124,15 +158,11 @@ export default function Friends() {
 
     try {
       const connection = await connectFriendByCode(profile, inviteCode);
-      const friendship = await fetchFriendshipByUsers(profile.id, connection.friendProfile.id);
+      const nextConnection = await fetchFriendConnection(connection.profile);
 
-      setProfile(connection.profile);
-      setFriendProfile(connection.friendProfile);
+      syncConnectionState(nextConnection.profile, nextConnection.friendProfile, nextConnection.friendship);
       setInviteCode('');
-      setBattleMeta(friendship);
-      setBattleTitle(friendship?.battle_title ?? '');
-      setWagerText(friendship?.wager_text ?? '');
-      setNotice(
+      showToast(
         t('friends.connectSuccess', {
           name: formatUserCompanion(connection.friendProfile.nickname, { locale, fallback: t('common.friend') }),
         })
@@ -147,10 +177,9 @@ export default function Friends() {
   const handleSaveBattleSetup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
-    setNotice('');
 
     if (!friendProfile || !battleMeta) {
-      setNotice(t('friends.startBattleDisabled'));
+      showToast(t('friends.startBattleDisabled'));
       return;
     }
 
@@ -182,8 +211,37 @@ export default function Friends() {
     setBattleMeta(nextBattleMeta);
     setBattleTitle(nextBattleMeta.battle_title ?? '');
     setWagerText(nextBattleMeta.wager_text ?? '');
-    setNotice(t('friends.battleSaved'));
+    showToast(t('friends.battleSaved'));
     setSavingBattle(false);
+  };
+
+  const handleOpenDisconnect = (event: MouseEvent<HTMLButtonElement>) => {
+    setError('');
+    setDisconnectOpen(true);
+    event.currentTarget.closest('details')?.removeAttribute('open');
+  };
+
+  const handleDisconnectFriend = async () => {
+    if (!profile) {
+      setError(t('friends.loadError'));
+      return;
+    }
+
+    setDisconnecting(true);
+    setError('');
+
+    try {
+      const result = await disconnectFriendConnection(profile, battleMeta?.id ?? null);
+      syncConnectionState(result.profile, null, null);
+      setInviteCode('');
+      setDisconnectOpen(false);
+      showToast(disconnectSuccessMessage);
+    } catch (disconnectError) {
+      console.warn('Friend disconnect failed:', disconnectError);
+      setError(disconnectError instanceof Error ? disconnectError.message : disconnectErrorMessage);
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   if (loading) {
@@ -196,16 +254,15 @@ export default function Friends() {
 
   return (
     <div className="mobile-shell">
-      <div className="app-screen subpage-screen">
+      <div className="app-screen subpage-screen friends-screen">
         <header className="subpage-header">
           <p className="section-eyebrow">{t('friends.eyebrow')}</p>
           <h1>{t('friends.title')}</h1>
           <p>{t('friends.description')}</p>
         </header>
 
-        <main className="subpage-content">
+        <main className="subpage-content friends-content">
           {error && <p className="error home-error">{error}</p>}
-          {notice && <p className="notice-text">{notice}</p>}
 
           <section className="section-block">
             <div className="section-header section-header-stack">
@@ -215,7 +272,7 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card friend-code-card">
+            <article className="empty-state-card friend-code-card friend-management-card">
               <h3>{profile?.friend_code ?? '--------'}</h3>
               <p>{t('friends.myCodeDescription')}</p>
             </article>
@@ -229,7 +286,7 @@ export default function Friends() {
               </div>
             </div>
 
-            <form className="invite-card" onSubmit={handleConnectFriend}>
+            <form className="invite-card friend-management-card" onSubmit={handleConnectFriend}>
               <input
                 type="text"
                 placeholder={t('friends.connectPlaceholder')}
@@ -251,7 +308,7 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card">
+            <article className="empty-state-card friend-management-card">
               <h3>{t('friends.requestCardTitle')}</h3>
               <p>{t('friends.requestCardBody')}</p>
             </article>
@@ -268,27 +325,52 @@ export default function Friends() {
             </div>
 
             {friendProfile ? (
-              <article className="friend-profile-card">
-                <div className="friend-profile-header">
-                  <div className="friend-avatar">VS</div>
-                  <div className="friend-copy">
-                    <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
-                    <h3>{friendName}</h3>
-                    <p>{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
+              <article className="friend-profile-card friend-management-card">
+                <div className="friend-profile-card-top">
+                  <div className="friend-profile-header">
+                    <div className="friend-avatar">VS</div>
+                    <div className="friend-copy">
+                      <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
+                      <h3>{friendName}</h3>
+                      <p>{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
+                    </div>
                   </div>
+
+                  <details className="task-menu friend-card-menu">
+                    <summary className="task-menu-trigger" aria-label={friendMenuLabel}>
+                      <span />
+                      <span />
+                      <span />
+                    </summary>
+
+                    <div className="task-menu-popover">
+                      <button className="task-menu-item task-menu-item-danger" type="button" onClick={handleOpenDisconnect}>
+                        {disconnectActionLabel}
+                      </button>
+                    </div>
+                  </details>
                 </div>
 
                 <div className="friend-profile-meta">
+                  <span className="battle-meta-pill">{battleStateLabel}</span>
                   <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || defaultBattleTitle}</span>
                   <span className="battle-meta-pill">{currentWager}</span>
                 </div>
 
-                <Link className="inline-action-link" to="/battle">
-                  {t('friends.profileBattleLink')}
-                </Link>
+                <div className="friend-profile-actions">
+                  {hasBattleStarted ? (
+                    <Link className="inline-action-link" to="/battle">
+                      {t('friends.profileBattleLink')}
+                    </Link>
+                  ) : (
+                    <a className="inline-action-link" href="#battle-setup-card">
+                      {setupActionLabel}
+                    </a>
+                  )}
+                </div>
               </article>
             ) : (
-              <article className="empty-state-card">
+              <article className="empty-state-card friend-management-card">
                 <h3>{t('friends.profileEmptyTitle')}</h3>
                 <p>{t('friends.profileEmptyBody')}</p>
               </article>
@@ -305,7 +387,11 @@ export default function Friends() {
               </div>
             </div>
 
-            <form className="invite-card battle-setup-form" onSubmit={handleSaveBattleSetup}>
+            <form
+              id="battle-setup-card"
+              className="invite-card battle-setup-form friend-management-card"
+              onSubmit={handleSaveBattleSetup}
+            >
               <label className="field-group" htmlFor="battle-title">
                 <span>{t('friends.battleTitleLabel')}</span>
                 <input
@@ -338,6 +424,37 @@ export default function Friends() {
             </form>
           </section>
         </main>
+
+        {toast && (
+          <div className="home-toast" role="status" aria-live="polite">
+            {toast.message}
+          </div>
+        )}
+
+        {disconnectOpen && (
+          <div className="modal-backdrop" role="presentation" onClick={() => !disconnecting && setDisconnectOpen(false)}>
+            <div
+              className="modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="disconnect-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="disconnect-title" className="modal-title">
+                {disconnectTitle}
+              </h2>
+              <p className="modal-copy">{disconnectDescription}</p>
+              <div className="modal-actions">
+                <button className="secondary-button" type="button" onClick={() => setDisconnectOpen(false)} disabled={disconnecting}>
+                  {isKo ? '취소' : 'Cancel'}
+                </button>
+                <button className="danger-button" type="button" onClick={handleDisconnectFriend} disabled={disconnecting}>
+                  {disconnecting ? t('home.saving') : disconnectActionLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <BottomTabBar />
       </div>

@@ -1521,7 +1521,20 @@ h3 {
 }
 
 .home-summary-card {
+  display: grid;
+  gap: 18px;
   padding-bottom: 20px;
+}
+
+.home-summary-card .battle-summary-bar,
+.home-summary-card .progress-card,
+.home-summary-card .summary-chip-row {
+  margin-top: 0;
+}
+
+.home-progress-section {
+  display: grid;
+  gap: 0;
 }
 
 .home-profile-shortcut {
@@ -1585,6 +1598,7 @@ h3 {
 }
 
 .home-task-card {
+  position: relative;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   gap: 14px;
@@ -1607,10 +1621,17 @@ h3 {
   gap: 12px;
 }
 
+.home-task-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .home-task-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -1635,20 +1656,20 @@ h3 {
 }
 
 .task-menu-trigger {
-  width: 38px;
-  height: 38px;
-  border-radius: 14px;
-  background: var(--surface-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  background: rgba(245, 242, 236, 0.92);
   border: 1px solid var(--border-subtle);
   display: grid;
   place-items: center;
-  gap: 3px;
+  gap: 2px;
 }
 
 .task-menu-trigger span {
   display: block;
-  width: 3px;
-  height: 3px;
+  width: 2.5px;
+  height: 2.5px;
   border-radius: 50%;
   background: var(--text-tertiary);
 }
@@ -1683,6 +1704,10 @@ h3 {
 
 .task-menu-item-danger {
   color: #b42318;
+}
+
+.task-menu-floating {
+  flex-shrink: 0;
 }
 
 .home-battle-overview {
@@ -1893,6 +1918,36 @@ h3 {
   gap: 8px;
 }
 
+.battle-summary-bar-score-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.battle-summary-score {
+  min-height: 88px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.battle-summary-score span {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.battle-summary-score strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
 .battle-meta-pill,
 .battle-hero-status-pill {
   display: inline-flex;
@@ -2028,6 +2083,87 @@ h3 {
   border: 1px solid var(--border-subtle);
   background: var(--surface);
   box-shadow: var(--shadow-soft);
+}
+
+.friends-screen {
+  background: #f3efe8;
+}
+
+.friend-management-card {
+  background: #ffffff;
+  border-color: rgba(36, 29, 20, 0.12);
+  box-shadow: 0 8px 20px rgba(37, 29, 18, 0.05);
+}
+
+.friend-profile-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.friend-profile-card-top .friend-profile-header {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-profile-actions {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.danger-button {
+  min-height: 46px;
+  border-radius: 15px;
+  background: #b42318;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  box-shadow: 0 6px 14px rgba(180, 35, 24, 0.16);
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(23, 20, 17, 0.26);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: 100%;
+  padding: 20px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-floating);
+}
+
+.modal-title {
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.modal-copy {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.58;
+  color: var(--text-secondary);
+}
+
+.modal-actions {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .battle-setup-form .field-group + .field-group {
@@ -2240,6 +2376,10 @@ h3 {
 
   .summary-chip-row,
   .home-battle-score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions {
     grid-template-columns: 1fr;
   }
 

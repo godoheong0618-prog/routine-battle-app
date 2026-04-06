@@ -158,7 +158,7 @@ export function isRoutineVisibleToday(routine: RoutineRow, today = getTodayDayKe
 
 export function formatDaysOfWeek(days: RoutineDayKey[] | null | undefined) {
   if (!days || days.length === 0) {
-    return '요일 미설정';
+    return '요일 미선택';
   }
 
   return WEEKDAY_OPTIONS.filter((option) => days.includes(option.key))
@@ -178,7 +178,7 @@ function buildFriendshipPairFilter(firstUserId: string, secondUserId: string) {
   return `and(user_id.eq.${firstUserId},friend_id.eq.${secondUserId}),and(user_id.eq.${secondUserId},friend_id.eq.${firstUserId})`;
 }
 
-async function resolveFriendshipFriendId(userId: string) {
+async function resolveFriendshipFriendId(userId: string): Promise<string | null | undefined> {
   const { data, error } = await supabase
     .from('friendships')
     .select('id, user_id, friend_id, created_at, battle_title, wager_text, battle_status, battle_started_at')
@@ -187,7 +187,7 @@ async function resolveFriendshipFriendId(userId: string) {
 
   if (error) {
     console.warn('Friendships lookup failed:', error);
-    return null;
+    return undefined;
   }
 
   if (!data || data.length === 0) {
@@ -220,7 +220,12 @@ async function resolveFriendshipFriendId(userId: string) {
 
 export async function resolveConnectedFriendId(userId: string, fallbackFriendId: string | null = null) {
   const friendshipFriendId = await resolveFriendshipFriendId(userId);
-  return friendshipFriendId ?? fallbackFriendId;
+
+  if (friendshipFriendId === undefined) {
+    return fallbackFriendId;
+  }
+
+  return friendshipFriendId;
 }
 
 async function withResolvedFriend(profile: ProfileRow) {
@@ -228,6 +233,12 @@ async function withResolvedFriend(profile: ProfileRow) {
 
   if (resolvedFriendId === profile.friend_id) {
     return profile;
+  }
+
+  const { error } = await supabase.from('profiles').update({ friend_id: resolvedFriendId }).eq('id', profile.id);
+
+  if (error) {
+    console.warn('Profile friend sync failed:', error);
   }
 
   return {
@@ -320,6 +331,18 @@ export async function fetchFriendshipByUsers(firstUserId: string, secondUserId: 
   return (data as FriendshipRow | null) ?? null;
 }
 
+export async function fetchFriendConnection(profile: ProfileRow) {
+  const nextProfile = await withResolvedFriend(profile);
+  const friendProfile = await fetchProfile(nextProfile.friend_id);
+  const friendship = await fetchFriendshipByUsers(nextProfile.id, friendProfile?.id ?? null);
+
+  return {
+    profile: nextProfile,
+    friendProfile,
+    friendship,
+  };
+}
+
 export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode: string) {
   const normalizedCode = normalizeFriendCode(inviteCode);
 
@@ -386,15 +409,6 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
     console.warn('Profile friend sync failed:', profileUpdateError);
   }
 
-  const { error: reverseProfileUpdateError } = await supabase
-    .from('profiles')
-    .update({ friend_id: currentProfile.id })
-    .eq('id', targetProfile.id);
-
-  if (reverseProfileUpdateError) {
-    console.warn('Reverse profile friend sync failed:', reverseProfileUpdateError);
-  }
-
   return {
     profile: {
       ...currentProfile,
@@ -405,6 +419,55 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
       friend_id: currentProfile.id,
     },
   };
+}
+
+export async function disconnectFriendConnection(currentProfile: ProfileRow, friendshipId: string | null = null) {
+  const resolvedProfile = await withResolvedFriend(currentProfile);
+  const connectedFriendId = resolvedProfile.friend_id;
+  const friendship =
+    friendshipId != null
+      ? { id: friendshipId }
+      : await fetchFriendshipByUsers(resolvedProfile.id, connectedFriendId);
+
+  if (friendship?.id) {
+    const { error: deleteError } = await supabase.from('friendships').delete().eq('id', friendship.id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+  }
+
+  const { error: profileUpdateError } = await supabase
+    .from('profiles')
+    .update({ friend_id: null })
+    .eq('id', resolvedProfile.id);
+
+  if (profileUpdateError) {
+    console.warn('Profile disconnect sync failed:', profileUpdateError);
+  }
+
+  return {
+    profile: {
+      ...resolvedProfile,
+      friend_id: null,
+    },
+    disconnectedFriendId: connectedFriendId,
+  };
+}
+
+function isSharedGoalPairMatch(goal: SharedGoalRow, currentUserId: string, friendId: string) {
+  return (
+    (goal.owner_id === currentUserId && goal.friend_id === friendId) ||
+    (goal.owner_id === friendId && goal.friend_id === currentUserId)
+  );
+}
+
+export function filterSharedGoalsForPair(sharedGoals: SharedGoalRow[], currentUserId: string, friendId: string | null) {
+  if (!friendId) {
+    return [];
+  }
+
+  return sharedGoals.filter((goal) => isSharedGoalPairMatch(goal, currentUserId, friendId));
 }
 
 type BattleScoreInput = {
