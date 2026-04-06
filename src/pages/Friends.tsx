@@ -282,7 +282,7 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card friend-code-card friend-management-card friend-management-card-outer">
+            <article className="empty-state-card friend-card-shell friend-code-card friend-management-card friend-management-card-outer">
               <div className="friend-code-display">
                 <h3>{profile?.friend_code ?? '--------'}</h3>
               </div>
@@ -298,7 +298,7 @@ export default function Friends() {
               </div>
             </div>
 
-            <form className="invite-card friend-connect-card friend-management-card friend-management-card-outer" onSubmit={handleConnectFriend}>
+            <form className="invite-card friend-card-shell friend-card-form friend-connect-card friend-management-card friend-management-card-outer" onSubmit={handleConnectFriend}>
               <input
                 type="text"
                 placeholder={t('friends.connectPlaceholder')}
@@ -320,7 +320,7 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card friend-note-card friend-management-card friend-management-card-outer">
+            <article className="empty-state-card friend-card-shell friend-card-copy-block friend-note-card friend-management-card friend-management-card-outer">
               <h3>{t('friends.requestCardTitle')}</h3>
               <p>{t('friends.requestCardBody')}</p>
             </article>
@@ -337,7 +337,7 @@ export default function Friends() {
             </div>
 
             {friendProfile ? (
-              <article className="friend-profile-card friend-management-card friend-management-card-outer">
+              <article className="friend-card-shell friend-profile-card friend-management-card friend-management-card-outer">
                 <div className="friend-profile-card-top">
                   <div className="friend-profile-header">
                     <div className="friend-avatar">VS</div>
@@ -383,7 +383,7 @@ export default function Friends() {
                 </div>
               </article>
             ) : (
-              <article className="empty-state-card friend-note-card friend-management-card friend-management-card-outer">
+              <article className="empty-state-card friend-card-shell friend-card-copy-block friend-note-card friend-management-card friend-management-card-outer">
                 <h3>{t('friends.profileEmptyTitle')}</h3>
                 <p>{t('friends.profileEmptyBody')}</p>
               </article>
@@ -402,7 +402,7 @@ export default function Friends() {
 
             <form
               id="battle-setup-card"
-              className="invite-card battle-setup-form friend-management-card friend-management-card-outer"
+              className="invite-card friend-card-shell friend-card-form battle-setup-form friend-management-card friend-management-card-outer"
               onSubmit={handleSaveBattleSetup}
             >
               <label className="field-group" htmlFor="battle-title">

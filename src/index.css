@@ -2087,6 +2087,12 @@ h3 {
 
 .friends-screen {
   background: #f3efe8;
+  --friend-card-radius: 28px;
+  --friend-card-inner-radius: 22px;
+  --friend-field-radius: 19px;
+  --friend-card-padding: 26px;
+  --friend-card-gap: 20px;
+  --friend-card-shadow: 0 8px 22px rgba(37, 29, 18, 0.05);
 }
 
 .friends-content {
@@ -2094,15 +2100,15 @@ h3 {
 }
 
 .friends-content .section-block {
-  margin-top: 40px;
+  margin-top: 42px;
 }
 
 .friends-content .section-block:first-child {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .friends-content .section-header {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .friends-content .section-description {
@@ -2112,23 +2118,27 @@ h3 {
 .friend-management-card {
   background: var(--surface);
   border: 1px solid rgba(36, 29, 20, 0.07);
-  border-radius: 30px;
-  box-shadow: 0 6px 18px rgba(37, 29, 18, 0.045);
+  border-radius: var(--friend-card-radius);
+  box-shadow: var(--friend-card-shadow);
 }
 
 .friend-management-card-outer {
   margin-top: 0;
   display: grid;
-  gap: 18px;
-  padding: 24px;
+  gap: var(--friend-card-gap);
+  padding: var(--friend-card-padding);
 }
 
-.friend-code-card,
-.friend-connect-card,
-.friend-note-card,
-.friend-profile-card,
-.battle-setup-form {
+.friend-card-shell {
   align-content: start;
+}
+
+.friend-card-form {
+  gap: 16px;
+}
+
+.friend-card-copy-block {
+  gap: 12px;
 }
 
 .friend-card-supporting-copy {
@@ -2137,26 +2147,17 @@ h3 {
 }
 
 .friend-code-display {
-  min-height: 94px;
+  min-height: 98px;
   display: grid;
   place-items: center;
-  padding: 0 18px;
-  border-radius: 20px;
-  border: 1px solid rgba(36, 29, 20, 0.05);
+  padding: 0 20px;
+  border-radius: var(--friend-card-inner-radius);
+  border: 1px solid rgba(36, 29, 20, 0.055);
   background: linear-gradient(180deg, #faf8f4 0%, #f4efe8 100%);
 }
 
 .friend-code-display h3 {
   letter-spacing: 0.12em;
-}
-
-.friend-connect-card,
-.battle-setup-form {
-  gap: 14px;
-}
-
-.friend-note-card {
-  gap: 10px;
 }
 
 .friend-note-card h3,
@@ -2166,28 +2167,34 @@ h3 {
 
 .friends-screen .friend-management-card-outer .field-group {
   margin: 0;
+  gap: 9px;
+}
+
+.friends-screen .friend-management-card-outer .field-group > span {
+  padding-left: 2px;
 }
 
 .friends-screen .friend-management-card-outer input {
-  min-height: 48px;
-  padding: 0 17px;
-  border-radius: 18px;
+  min-height: 50px;
+  padding: 0 18px;
+  border-radius: var(--friend-field-radius);
   background: #f7f3ed;
   border: 1px solid rgba(36, 29, 20, 0.055);
   box-shadow: none;
 }
 
 .friends-screen .friend-management-card-outer .primary-button {
-  min-height: 48px;
-  border-radius: 18px;
-  box-shadow: none;
+  min-height: 50px;
+  padding: 0 20px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 6px 14px rgba(31, 25, 18, 0.06);
 }
 
 .friend-profile-card-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
 }
 
 .friends-screen .friend-profile-header {
@@ -2201,26 +2208,51 @@ h3 {
 }
 
 .friend-profile-status-copy {
-  margin: -2px 0 0;
+  margin: 2px 0 0;
   font-size: 14px;
   line-height: 1.58;
   color: var(--text-secondary);
 }
 
+.friends-screen .friend-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #24211d 0%, #161513 100%);
+}
+
+.friends-screen .friend-profile-meta {
+  margin-top: 4px;
+  gap: 10px;
+}
+
 .friends-screen .battle-meta-pill {
-  background: var(--surface-muted);
-  border: 1px solid rgba(36, 29, 20, 0.08);
+  min-height: 34px;
+  padding: 0 13px;
+  background: #f6f1ea;
+  border: 1px solid rgba(36, 29, 20, 0.075);
   color: var(--text-primary);
 }
 
 .friend-profile-actions {
-  margin-top: 2px;
+  margin-top: 4px;
   display: grid;
   gap: 10px;
 }
 
 .friend-profile-card .inline-action-link {
   margin-top: 0;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+}
+
+.friends-screen .task-menu-trigger {
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  background: #f7f3ed;
+  border-color: rgba(36, 29, 20, 0.06);
 }
 
 .danger-button {
@@ -2654,35 +2686,33 @@ h3 {
   }
 
   .friends-content {
-    padding-top: 22px;
+    padding-top: 24px;
   }
 
   .friends-content .section-block {
-    margin-top: 32px;
+    margin-top: 34px;
   }
 
   .friends-content .section-header {
-    margin-bottom: 14px;
+    margin-bottom: 15px;
   }
 
-  .friends-screen .friend-management-card {
-    border-radius: 28px;
-  }
-
-  .friends-screen .friend-management-card-outer {
-    gap: 16px;
-    padding: 21px 20px;
+  .friends-screen {
+    --friend-card-radius: 26px;
+    --friend-card-inner-radius: 20px;
+    --friend-field-radius: 18px;
+    --friend-card-padding: 22px;
+    --friend-card-gap: 18px;
   }
 
   .friends-screen .friend-code-display {
-    min-height: 78px;
-    border-radius: 18px;
+    min-height: 82px;
   }
 
   .friends-screen .friend-management-card-outer input,
-  .friends-screen .friend-management-card-outer .primary-button {
-    min-height: 46px;
-    border-radius: 17px;
+  .friends-screen .friend-management-card-outer .primary-button,
+  .friends-screen .friend-profile-card .inline-action-link {
+    min-height: 48px;
   }
 
   .friend-profile-header {
@@ -2690,9 +2720,9 @@ h3 {
   }
 
   .friend-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
+    width: 42px;
+    height: 42px;
+    border-radius: 16px;
     font-size: 18px;
   }
 
@@ -2702,13 +2732,13 @@ h3 {
   }
 
   .friend-profile-meta {
-    margin-top: 14px;
-    gap: 6px;
+    margin-top: 12px;
+    gap: 8px;
   }
 
   .battle-meta-pill {
-    min-height: 30px;
-    padding: 0 10px;
+    min-height: 32px;
+    padding: 0 11px;
   }
 
   .invite-card .primary-button,
