@@ -283,7 +283,7 @@ export default function Friends() {
             </div>
 
             <article className="empty-state-card friend-code-card friend-management-card friend-management-card-outer">
-              <div className="friend-card-inner friend-code-panel">
+              <div className="friend-code-display">
                 <h3>{profile?.friend_code ?? '--------'}</h3>
               </div>
               <p className="friend-card-supporting-copy">{t('friends.myCodeDescription')}</p>
@@ -298,19 +298,17 @@ export default function Friends() {
               </div>
             </div>
 
-            <form className="invite-card friend-management-card friend-management-card-outer" onSubmit={handleConnectFriend}>
-              <div className="friend-card-inner friend-form-stack">
-                <input
-                  type="text"
-                  placeholder={t('friends.connectPlaceholder')}
-                  value={inviteCode}
-                  onChange={(event) => setInviteCode(normalizeFriendCode(event.target.value))}
-                  disabled={Boolean(friendProfile) || submitting}
-                />
-                <button className="primary-button" type="submit" disabled={Boolean(friendProfile) || submitting}>
-                  {submitting ? t('friends.connecting') : t('friends.connectAction')}
-                </button>
-              </div>
+            <form className="invite-card friend-connect-card friend-management-card friend-management-card-outer" onSubmit={handleConnectFriend}>
+              <input
+                type="text"
+                placeholder={t('friends.connectPlaceholder')}
+                value={inviteCode}
+                onChange={(event) => setInviteCode(normalizeFriendCode(event.target.value))}
+                disabled={Boolean(friendProfile) || submitting}
+              />
+              <button className="primary-button" type="submit" disabled={Boolean(friendProfile) || submitting}>
+                {submitting ? t('friends.connecting') : t('friends.connectAction')}
+              </button>
             </form>
           </section>
 
@@ -322,11 +320,9 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card friend-management-card friend-management-card-outer">
-              <div className="friend-card-inner friend-note-panel">
-                <h3>{t('friends.requestCardTitle')}</h3>
-                <p>{t('friends.requestCardBody')}</p>
-              </div>
+            <article className="empty-state-card friend-note-card friend-management-card friend-management-card-outer">
+              <h3>{t('friends.requestCardTitle')}</h3>
+              <p>{t('friends.requestCardBody')}</p>
             </article>
           </section>
 
@@ -342,37 +338,36 @@ export default function Friends() {
 
             {friendProfile ? (
               <article className="friend-profile-card friend-management-card friend-management-card-outer">
-                <div className="friend-card-inner friend-profile-panel">
-                  <div className="friend-profile-card-top">
-                    <div className="friend-profile-header">
-                      <div className="friend-avatar">VS</div>
-                      <div className="friend-copy">
-                        <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
-                        <h3>{friendName}</h3>
-                        <p>{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
-                      </div>
+                <div className="friend-profile-card-top">
+                  <div className="friend-profile-header">
+                    <div className="friend-avatar">VS</div>
+                    <div className="friend-copy">
+                      <span className="battle-label">{t('friends.profileConnectedLabel')}</span>
+                      <h3>{friendName}</h3>
                     </div>
-
-                    <details className="task-menu friend-card-menu">
-                      <summary className="task-menu-trigger" aria-label={friendMenuLabel}>
-                        <span />
-                        <span />
-                        <span />
-                      </summary>
-
-                      <div className="task-menu-popover">
-                        <button className="task-menu-item task-menu-item-danger" type="button" onClick={handleOpenDisconnect}>
-                          {disconnectActionLabel}
-                        </button>
-                      </div>
-                    </details>
                   </div>
 
-                  <div className="friend-profile-meta">
-                    <span className="battle-meta-pill">{battleStateLabel}</span>
-                    <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || defaultBattleTitle}</span>
-                    <span className="battle-meta-pill">{currentWager}</span>
-                  </div>
+                  <details className="task-menu friend-card-menu">
+                    <summary className="task-menu-trigger" aria-label={friendMenuLabel}>
+                      <span />
+                      <span />
+                      <span />
+                    </summary>
+
+                    <div className="task-menu-popover">
+                      <button className="task-menu-item task-menu-item-danger" type="button" onClick={handleOpenDisconnect}>
+                        {disconnectActionLabel}
+                      </button>
+                    </div>
+                  </details>
+                </div>
+
+                <p className="friend-profile-status-copy">{t('friends.profileConnectedBody', { name: friendCompanion })}</p>
+
+                <div className="friend-profile-meta">
+                  <span className="battle-meta-pill">{battleStateLabel}</span>
+                  <span className="battle-meta-pill">{battleMeta?.battle_title?.trim() || defaultBattleTitle}</span>
+                  <span className="battle-meta-pill">{currentWager}</span>
                 </div>
 
                 <div className="friend-profile-actions">
@@ -388,11 +383,9 @@ export default function Friends() {
                 </div>
               </article>
             ) : (
-              <article className="empty-state-card friend-management-card friend-management-card-outer">
-                <div className="friend-card-inner friend-note-panel">
-                  <h3>{t('friends.profileEmptyTitle')}</h3>
-                  <p>{t('friends.profileEmptyBody')}</p>
-                </div>
+              <article className="empty-state-card friend-note-card friend-management-card friend-management-card-outer">
+                <h3>{t('friends.profileEmptyTitle')}</h3>
+                <p>{t('friends.profileEmptyBody')}</p>
               </article>
             )}
           </section>
@@ -412,33 +405,31 @@ export default function Friends() {
               className="invite-card battle-setup-form friend-management-card friend-management-card-outer"
               onSubmit={handleSaveBattleSetup}
             >
-              <div className="friend-card-inner friend-battle-form-panel">
-                <label className="field-group" htmlFor="battle-title">
-                  <span>{t('friends.battleTitleLabel')}</span>
-                  <input
-                    id="battle-title"
-                    type="text"
-                    placeholder={t('friends.battleTitlePlaceholder')}
-                    value={battleTitle}
-                    onChange={(event) => setBattleTitle(event.target.value)}
-                    maxLength={50}
-                    disabled={!friendProfile || savingBattle}
-                  />
-                </label>
+              <label className="field-group" htmlFor="battle-title">
+                <span>{t('friends.battleTitleLabel')}</span>
+                <input
+                  id="battle-title"
+                  type="text"
+                  placeholder={t('friends.battleTitlePlaceholder')}
+                  value={battleTitle}
+                  onChange={(event) => setBattleTitle(event.target.value)}
+                  maxLength={50}
+                  disabled={!friendProfile || savingBattle}
+                />
+              </label>
 
-                <label className="field-group" htmlFor="battle-wager">
-                  <span>{t('friends.wagerLabel')}</span>
-                  <input
-                    id="battle-wager"
-                    type="text"
-                    placeholder={t('friends.wagerPlaceholder')}
-                    value={wagerText}
-                    onChange={(event) => setWagerText(event.target.value)}
-                    maxLength={60}
-                    disabled={!friendProfile || savingBattle}
-                  />
-                </label>
-              </div>
+              <label className="field-group" htmlFor="battle-wager">
+                <span>{t('friends.wagerLabel')}</span>
+                <input
+                  id="battle-wager"
+                  type="text"
+                  placeholder={t('friends.wagerPlaceholder')}
+                  value={wagerText}
+                  onChange={(event) => setWagerText(event.target.value)}
+                  maxLength={60}
+                  disabled={!friendProfile || savingBattle}
+                />
+              </label>
 
               <button className="primary-button" type="submit" disabled={!friendProfile || !battleMeta || savingBattle}>
                 {savingBattle ? t('home.saving') : battleActionLabel}
