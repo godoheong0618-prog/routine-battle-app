@@ -272,9 +272,11 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card friend-code-card friend-management-card">
-              <h3>{profile?.friend_code ?? '--------'}</h3>
-              <p>{t('friends.myCodeDescription')}</p>
+            <article className="empty-state-card friend-code-card friend-management-card friend-management-card-outer">
+              <div className="friend-card-inner friend-code-panel">
+                <h3>{profile?.friend_code ?? '--------'}</h3>
+              </div>
+              <p className="friend-card-supporting-copy">{t('friends.myCodeDescription')}</p>
             </article>
           </section>
 
@@ -286,17 +288,19 @@ export default function Friends() {
               </div>
             </div>
 
-            <form className="invite-card friend-management-card" onSubmit={handleConnectFriend}>
-              <input
-                type="text"
-                placeholder={t('friends.connectPlaceholder')}
-                value={inviteCode}
-                onChange={(event) => setInviteCode(normalizeFriendCode(event.target.value))}
-                disabled={Boolean(friendProfile) || submitting}
-              />
-              <button className="primary-button" type="submit" disabled={Boolean(friendProfile) || submitting}>
-                {submitting ? t('friends.connecting') : t('friends.connectAction')}
-              </button>
+            <form className="invite-card friend-management-card friend-management-card-outer" onSubmit={handleConnectFriend}>
+              <div className="friend-card-inner friend-form-stack">
+                <input
+                  type="text"
+                  placeholder={t('friends.connectPlaceholder')}
+                  value={inviteCode}
+                  onChange={(event) => setInviteCode(normalizeFriendCode(event.target.value))}
+                  disabled={Boolean(friendProfile) || submitting}
+                />
+                <button className="primary-button" type="submit" disabled={Boolean(friendProfile) || submitting}>
+                  {submitting ? t('friends.connecting') : t('friends.connectAction')}
+                </button>
+              </div>
             </form>
           </section>
 
@@ -308,9 +312,11 @@ export default function Friends() {
               </div>
             </div>
 
-            <article className="empty-state-card friend-management-card">
-              <h3>{t('friends.requestCardTitle')}</h3>
-              <p>{t('friends.requestCardBody')}</p>
+            <article className="empty-state-card friend-management-card friend-management-card-outer">
+              <div className="friend-card-inner friend-note-panel">
+                <h3>{t('friends.requestCardTitle')}</h3>
+                <p>{t('friends.requestCardBody')}</p>
+              </div>
             </article>
           </section>
 
