@@ -65,6 +65,8 @@ export type FriendshipRow = {
 
 export type BattleLeader = 'me' | 'friend' | 'tied' | 'waiting';
 
+const FRIENDSHIP_CORE_SELECT = 'id,user_id,friend_id,created_at';
+
 type DatedCheckin = {
   check_in_date?: string | null;
   check_date?: string | null;
@@ -178,10 +180,31 @@ function buildFriendshipPairFilter(firstUserId: string, secondUserId: string) {
   return `and(user_id.eq.${firstUserId},friend_id.eq.${secondUserId}),and(user_id.eq.${secondUserId},friend_id.eq.${firstUserId})`;
 }
 
+function toFriendshipRow(data: Partial<FriendshipRow> | null | undefined): FriendshipRow | null {
+  if (!data?.id || !data.user_id || !data.friend_id || !data.created_at) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    user_id: data.user_id,
+    friend_id: data.friend_id,
+    created_at: data.created_at,
+    battle_title: data.battle_title ?? null,
+    wager_text: data.wager_text ?? null,
+    battle_status: data.battle_status ?? null,
+    battle_started_at: data.battle_started_at ?? null,
+  };
+}
+
+export function isFriendshipBattleMetaMissing(error: { code?: string; message?: string } | null | undefined) {
+  return error?.code === '42703' && error.message?.includes('friendships.') === true;
+}
+
 async function resolveFriendshipFriendId(userId: string): Promise<string | null | undefined> {
   const { data, error } = await supabase
     .from('friendships')
-    .select('id, user_id, friend_id, created_at, battle_title, wager_text, battle_status, battle_started_at')
+    .select(FRIENDSHIP_CORE_SELECT)
     .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     .limit(10);
 
@@ -194,7 +217,9 @@ async function resolveFriendshipFriendId(userId: string): Promise<string | null 
     return null;
   }
 
-  const friendships = data as FriendshipRow[];
+  const friendships = ((data as Partial<FriendshipRow>[] | null) ?? [])
+    .map((row) => toFriendshipRow(row))
+    .filter((row): row is FriendshipRow => Boolean(row));
   const candidates = Array.from(
     new Set(
       friendships.flatMap((friendship) => {
@@ -320,7 +345,7 @@ export async function fetchFriendshipByUsers(firstUserId: string, secondUserId: 
 
   const { data, error } = await supabase
     .from('friendships')
-    .select('id, user_id, friend_id, created_at, battle_title, wager_text, battle_status, battle_started_at')
+    .select(FRIENDSHIP_CORE_SELECT)
     .or(buildFriendshipPairFilter(firstUserId, secondUserId))
     .maybeSingle();
 
@@ -328,7 +353,7 @@ export async function fetchFriendshipByUsers(firstUserId: string, secondUserId: 
     throw error;
   }
 
-  return (data as FriendshipRow | null) ?? null;
+  return toFriendshipRow((data as Partial<FriendshipRow> | null) ?? null);
 }
 
 export async function fetchFriendConnection(profile: ProfileRow) {

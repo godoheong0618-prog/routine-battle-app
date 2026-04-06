@@ -10,6 +10,7 @@ import {
   disconnectFriendConnection,
   ensureProfile,
   fetchFriendConnection,
+  isFriendshipBattleMetaMissing,
   normalizeFriendCode,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
@@ -144,6 +145,9 @@ export default function Friends() {
     ? '친구 연결을 해제하지 못했어요. 잠시 후 다시 시도해 주세요.'
     : 'Could not remove the friend connection. Please try again.';
   const setupActionLabel = isKo ? '배틀 준비하기' : 'Set up battle';
+  const battleMetaUnsupportedMessage = isKo
+    ? '친구 연결은 정상 동작하지만 현재 DB에 배틀 설정 컬럼이 없어 저장할 수 없어요. SQL을 먼저 적용해 주세요.'
+    : 'Friend connection works, but this database does not have the battle setup columns yet. Apply the SQL first.';
 
   const handleConnectFriend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -202,7 +206,13 @@ export default function Friends() {
 
     if (updateError) {
       console.warn('Battle setup save failed:', updateError);
-      setError(t('friends.loadError'));
+
+      if (isFriendshipBattleMetaMissing(updateError)) {
+        setError(battleMetaUnsupportedMessage);
+      } else {
+        setError(t('friends.loadError'));
+      }
+
       setSavingBattle(false);
       return;
     }
