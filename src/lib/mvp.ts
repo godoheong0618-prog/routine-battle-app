@@ -121,6 +121,8 @@ export const ROUTINE_STATUS_WEIGHT: Record<RoutineStatus, number> = {
   rest: 0,
 };
 
+export const BATTLE_ROUTINE_DONE_POINTS = 2;
+
 export type RoutineTemplate = {
   id: string;
   title: string;
@@ -234,6 +236,72 @@ export function getWeekDateKeys(date = new Date()) {
     cursor.setDate(start.getDate() + index);
     return getDateKey(cursor);
   });
+}
+
+export function getFullWeekDateKeys(date = new Date()) {
+  const start = new Date(date);
+  const dayOffset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - dayOffset);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const cursor = new Date(start);
+    cursor.setDate(start.getDate() + index);
+    return getDateKey(cursor);
+  });
+}
+
+export function getDaysUntilDateKey(dateKey: string | null | undefined, fromDate = new Date()) {
+  if (!dateKey) {
+    return null;
+  }
+
+  const target = parseDateKey(dateKey);
+  const current = parseDateKey(getDateKey(fromDate));
+  const diff = target.getTime() - current.getTime();
+
+  return Math.max(0, Math.ceil(diff / 86400000));
+}
+
+export function getDaysUntilWeekEnd(date = new Date()) {
+  return getDaysUntilDateKey(getWeekEndKey(date), date) ?? 0;
+}
+
+export function getBattleActionHint({
+  difference,
+  hasFriend,
+  locale,
+  routineDonePoints = BATTLE_ROUTINE_DONE_POINTS,
+}: {
+  difference: number;
+  hasFriend: boolean;
+  locale: string;
+  routineDonePoints?: number;
+}) {
+  const isKo = locale === 'ko';
+
+  if (!hasFriend) {
+    return isKo ? '친구를 연결하면 배틀 점수가 보여요.' : 'Connect a friend to start the score battle.';
+  }
+
+  if (difference > 0) {
+    return isKo ? '현재 앞서고 있어요.' : 'You are ahead right now.';
+  }
+
+  if (difference === 0) {
+    return isKo ? '지금 1개만 더 하면 앞설 수 있어요.' : 'Finish one more to take the lead.';
+  }
+
+  const deficit = Math.abs(difference);
+  const routinesToTie = Math.ceil(deficit / routineDonePoints);
+  const routinesToLead = Math.floor(deficit / routineDonePoints) + 1;
+
+  if (deficit % routineDonePoints === 0 && routinesToTie === 1) {
+    return isKo ? '지금 1개만 더 하면 동점이에요.' : 'One more makes it a tie.';
+  }
+
+  return isKo
+    ? `역전하려면 ${routinesToLead}개 더 완료해야 해요.`
+    : `Finish ${routinesToLead} more to take the lead.`;
 }
 
 export function normalizeRoutineStatus(status: string | null | undefined): RoutineStatus {
@@ -405,6 +473,19 @@ export function calculateRoutineStats(
 
   const daily = dateKeys.map((dateKey) => {
     const scheduledRoutines = userRoutines.filter((routine) => isRoutineVisibleOnDate(routine, dateKey));
+    const isFutureDate = dateKey > getTodayKey();
+
+    if (isFutureDate) {
+      return {
+        dateKey,
+        dayKey: getDayKeyForDateKey(dateKey),
+        total: scheduledRoutines.length,
+        score: 0,
+        percent: 0,
+        status: 'off' as RoutineDayStatus,
+      };
+    }
+
     let dayScore = 0;
     let dayDone = 0;
     let dayPartial = 0;

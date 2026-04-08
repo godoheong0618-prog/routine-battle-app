@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import BattleScoreCard from '../components/BattleScoreCard';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
@@ -21,6 +22,8 @@ import {
   fetchFriendConnection,
   fetchRoutineLogsForUsers,
   filterSharedGoalsForPair,
+  getBattleActionHint,
+  getDaysUntilWeekEnd,
   getTodayKey,
   getWeekDateKeys,
   isPositiveRoutineStatus,
@@ -372,26 +375,15 @@ export default function Battle() {
           : `${opponentLabel} leads`
         : battleSummary.leader === 'tied'
           ? isKo
-            ? '동점 상황'
-            : 'Tied battle'
-          : t('battle.statusWaiting');
-  const canFlipWithOneMore = battleSummary.leader === 'friend' && Math.abs(battleSummary.difference) <= 2;
-  const scoreboardHint =
-    battleSummary.leader === 'friend'
-      ? canFlipWithOneMore
-        ? isKo
-          ? '오늘 1개만 더 하면 뒤집을 수 있어요.'
-          : 'One more today can flip it.'
-        : isKo
-          ? '오늘 1개씩 따라붙는 것부터 시작해요.'
-          : 'Start by closing the gap one routine at a time.'
-      : battleSummary.leader === 'me'
-        ? isKo
-          ? '오늘 1개 더 하면 리드를 지킬 수 있어요.'
-          : 'One more today helps protect the lead.'
-        : isKo
-          ? '오늘 1개 먼저 하면 앞설 수 있어요.'
-          : 'Finish one today to move ahead.';
+          ? '동점 상황'
+          : 'Tied battle'
+        : t('battle.statusWaiting');
+  const scoreboardHint = getBattleActionHint({
+    difference: battleSummary.difference,
+    hasFriend: Boolean(friendProfile),
+    locale,
+  });
+  const battleDaysLeft = getDaysUntilWeekEnd();
   const weekDateKeys = useMemo(() => getWeekDateKeys(), []);
 
   const battleRoutineViews = useMemo<BattleRoutineView[]>(() => {
@@ -631,31 +623,25 @@ export default function Battle() {
             </article>
           ) : (
             <>
-              <section className="battle-situation-card">
-                <div className="battle-situation-top">
-                  <div>
-                    <p className="section-eyebrow">{battleTitle}</p>
-                    <h2>{scoreboardTitle}</h2>
-                  </div>
-                  <span>{t('battle.heroDifference', { points: Math.abs(battleSummary.difference) })}</span>
-                </div>
-
-                <div className="battle-situation-score">
-                  <article>
-                    <span>{profileLabel}</span>
-                    <strong>{battleSummary.myScore}</strong>
-                  </article>
-                  <article>
-                    <span>{opponentLabel}</span>
-                    <strong>{battleSummary.friendScore}</strong>
-                  </article>
-                </div>
-
-                <p>{scoreboardHint}</p>
-                <a className="primary-button battle-open-cta" href="#battle-routines">
-                  {isKo ? '배틀 열기' : 'Open battle'}
-                </a>
-              </section>
+              <BattleScoreCard
+                eyebrow={battleTitle}
+                title={scoreboardTitle}
+                myLabel={profileLabel}
+                friendLabel={opponentLabel}
+                myScore={battleSummary.myScore}
+                friendScore={battleSummary.friendScore}
+                leader={battleSummary.leader}
+                daysLeft={battleDaysLeft}
+                actionHint={scoreboardHint}
+                hasFriend={Boolean(friendProfile)}
+                hasBattleStarted={hasBattleStarted}
+                emptyTitle={battleSetupTitle}
+                emptyBody={battleSetupBody}
+                setupHref="/friends"
+                setupLabel={battleSetupAction}
+                ctaHref="#battle-routines"
+                ctaLabel={isKo ? '배틀 열기' : 'Open battle'}
+              />
 
               <section className="section-block" id="battle-routines">
                 <div className="section-header section-header-stack">

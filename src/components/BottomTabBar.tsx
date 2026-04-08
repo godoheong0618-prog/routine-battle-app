@@ -2,12 +2,13 @@ import { NavLink } from 'react-router-dom';
 import { useLanguage } from '../i18n/LanguageContext';
 
 export default function BottomTabBar() {
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
+  const isKo = locale === 'ko';
 
   const tabs = [
-    { to: '/home', label: 'Today' },
-    { to: '/battle', label: t('tabs.battle') },
-    { to: '/stats', label: 'Stats' },
+    { to: '/home', label: isKo ? '홈' : 'Home' },
+    { to: '/battle', label: isKo ? '배틀' : t('tabs.battle') },
+    { to: '/stats', label: isKo ? '기록' : 'Stats' },
   ];
 
   return (

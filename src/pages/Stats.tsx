@@ -11,8 +11,8 @@ import {
   ensureProfile,
   fetchFriendConnection,
   fetchRoutineLogsForUsers,
+  getFullWeekDateKeys,
   getLastDateKeys,
-  getWeekDateKeys,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -92,7 +92,7 @@ export default function Stats() {
   const friendLabel = formatOpponentLabel(friendProfile?.nickname, { locale });
 
   const weekStats = useMemo(
-    () => calculateRoutineStats(myRoutines, routineLogs, userId, getWeekDateKeys()),
+    () => calculateRoutineStats(myRoutines, routineLogs, userId, getFullWeekDateKeys()),
     [myRoutines, routineLogs, userId]
   );
   const sevenDayStats = useMemo(
@@ -102,7 +102,7 @@ export default function Stats() {
   const friendWeekStats = useMemo(
     () =>
       friendProfile
-        ? calculateRoutineStats(friendRoutines, routineLogs, friendProfile.id, getWeekDateKeys())
+        ? calculateRoutineStats(friendRoutines, routineLogs, friendProfile.id, getFullWeekDateKeys())
         : null,
     [friendProfile, friendRoutines, routineLogs]
   );
@@ -121,7 +121,7 @@ export default function Stats() {
     <div className="mobile-shell">
       <div className="app-screen subpage-screen stats-screen">
         <header className="subpage-header">
-          <p className="section-eyebrow">Stats</p>
+          <p className="section-eyebrow">{isKo ? '기록' : 'Stats'}</p>
           <h1>{isKo ? '이번 주 기록' : 'This week stats'}</h1>
           <p>{isKo ? '필요한 숫자만 간단히 확인해요.' : 'A compact view of the numbers that matter.'}</p>
         </header>

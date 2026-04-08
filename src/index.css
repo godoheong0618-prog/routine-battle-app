@@ -294,7 +294,7 @@ h3 {
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1a1917 0%, #32302b 100%);
+  background: linear-gradient(90deg, #34a56f 0%, #1f8a5b 100%);
 }
 
 .progress-fill-muted {
@@ -1931,6 +1931,48 @@ h3 {
   border-radius: 12px;
 }
 
+.routine-feedback-done {
+  animation: routine-done-pop 360ms ease;
+}
+
+.routine-feedback-partial,
+.routine-feedback-rest {
+  animation: routine-soft-pop 280ms ease;
+}
+
+.routine-feedback-burst {
+  position: absolute;
+  top: 12px;
+  right: 52px;
+  z-index: 2;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-size: 12px;
+  font-weight: 850;
+  animation: routine-feedback-float 700ms ease forwards;
+}
+
+.routine-feedback-burst-done {
+  background: #1f8a5b;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(31, 138, 91, 0.22);
+}
+
+.routine-feedback-burst-partial {
+  background: #f2c94c;
+  color: #3b2f08;
+}
+
+.routine-feedback-burst-rest {
+  background: #d9d5ce;
+  color: #2d2a25;
+}
+
 .home-week-mini-card {
   margin-top: 16px;
   padding: 14px 16px;
@@ -1969,6 +2011,11 @@ h3 {
 
 .home-week-mini-card .traffic-row {
   margin-top: 0;
+}
+
+.home-week-mini-card .progress-track {
+  margin-top: 0;
+  height: 7px;
 }
 
 .home-battle-section {
@@ -2473,6 +2520,121 @@ h3 {
 
 .battle-page-header {
   padding-bottom: 0;
+}
+
+.battle-score-card {
+  padding: 20px;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 42%),
+    linear-gradient(180deg, #191816 0%, #27231f 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 30px rgba(31, 25, 18, 0.14);
+  display: grid;
+  gap: 14px;
+  transform-origin: center;
+}
+
+.battle-score-card .section-eyebrow {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.battle-score-card h2 {
+  margin-top: 7px;
+  font-size: 25px;
+  line-height: 1.14;
+  letter-spacing: -0.045em;
+}
+
+.battle-score-card-empty p,
+.battle-score-hint {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.battle-score-card-empty p {
+  margin-top: 9px;
+}
+
+.battle-score-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.battle-days-pill {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: inline-flex;
+  align-items: center;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.battle-score-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.battle-score-box {
+  min-height: 96px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.battle-score-box-leading {
+  background: rgba(67, 164, 111, 0.18);
+  border-color: rgba(111, 215, 156, 0.28);
+}
+
+.battle-score-box span {
+  display: block;
+  max-width: 100%;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.battle-score-box strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 38px;
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.battle-score-cta {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  color: #171614;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.battle-score-card-pulse {
+  animation: battle-score-pulse 520ms ease;
+}
+
+.home-battle-score-card {
+  box-shadow: 0 12px 28px rgba(31, 25, 18, 0.12);
 }
 
 .battle-situation-card {
@@ -3275,6 +3437,64 @@ h3 {
 
   100% {
     background-position: -200% 0;
+  }
+}
+
+@keyframes routine-done-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(0.985);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes routine-soft-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(0.992);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes routine-feedback-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-18px) scale(1);
+  }
+}
+
+@keyframes battle-score-pulse {
+  0% {
+    transform: scale(1);
+  }
+
+  42% {
+    transform: scale(1.012);
+  }
+
+  100% {
+    transform: scale(1);
   }
 }
 
