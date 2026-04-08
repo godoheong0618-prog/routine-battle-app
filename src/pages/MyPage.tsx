@@ -6,18 +6,22 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { Locale } from '../i18n/messages';
 import { getAuthCopy } from '../lib/auth';
 import { formatSelfLabel } from '../lib/nameDisplay';
-import { ProfileRow, SharedGoalCheckinRow, calculateStreak, ensureProfile } from '../lib/mvp';
+import {
+  ProfileRow,
+  RoutineLogRow,
+  SharedGoalCheckinRow,
+  calculateStreak,
+  ensureProfile,
+  fetchRoutineLogsForUsers,
+  isPositiveRoutineStatus,
+} from '../lib/mvp';
 import { supabase } from '../supabaseClient';
-
-type CheckinSummary = {
-  check_in_date: string;
-};
 
 const LANGUAGE_OPTIONS: Locale[] = ['ko', 'en'];
 
 export default function MyPage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [personalCheckins, setPersonalCheckins] = useState<CheckinSummary[]>([]);
+  const [personalCheckins, setPersonalCheckins] = useState<RoutineLogRow[]>([]);
   const [sharedCheckins, setSharedCheckins] = useState<SharedGoalCheckinRow[]>([]);
   const [routineCount, setRoutineCount] = useState(0);
   const [error, setError] = useState('');
@@ -43,7 +47,7 @@ export default function MyPage() {
 
         const [routineResult, checkinsResult, sharedResult] = await Promise.allSettled([
           supabase.from('routines').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('checkins').select('check_in_date').eq('user_id', user.id),
+          fetchRoutineLogsForUsers([user.id]),
           supabase.from('shared_goal_checkins').select('goal_id, user_id, check_date').eq('user_id', user.id),
         ]);
 
@@ -53,8 +57,8 @@ export default function MyPage() {
           console.warn('MyPage optional routine count load failed:', routineResult);
         }
 
-        if (checkinsResult.status === 'fulfilled' && !checkinsResult.value.error) {
-          setPersonalCheckins((checkinsResult.value.data as CheckinSummary[]) ?? []);
+        if (checkinsResult.status === 'fulfilled') {
+          setPersonalCheckins(checkinsResult.value);
         } else {
           console.warn('MyPage optional personal checkins load failed:', checkinsResult);
         }
@@ -75,7 +79,7 @@ export default function MyPage() {
     loadProfile();
   }, [navigate, t]);
 
-  const totalCompletions = personalCheckins.length + sharedCheckins.length;
+  const totalCompletions = personalCheckins.filter((log) => isPositiveRoutineStatus(log.status)).length + sharedCheckins.length;
   const streak = useMemo(() => calculateStreak(personalCheckins), [personalCheckins]);
   const authCopy = useMemo(() => getAuthCopy(locale), [locale]);
   const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('my.profileFallback') });

@@ -1,9 +1,19 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { RoutineDayKey, RoutineRow, WEEKDAY_OPTIONS } from '../lib/mvp';
+import {
+  EVERYDAY_KEYS,
+  ROUTINE_TEMPLATES,
+  RoutineDayKey,
+  RoutineRow,
+  WEEKDAY_KEYS,
+  WEEKDAY_OPTIONS,
+  formatDaysOfWeek,
+  getRoutineRepeatDays,
+} from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
 type RepeatMode = 'daily' | 'specific_days';
+type CreateMode = 'custom' | 'template';
 
 export default function CreateRoutine() {
   const [searchParams] = useSearchParams();
@@ -15,6 +25,8 @@ export default function CreateRoutine() {
   const [targetCount, setTargetCount] = useState(1);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('daily');
   const [selectedDays, setSelectedDays] = useState<RoutineDayKey[]>([]);
+  const [createMode, setCreateMode] = useState<CreateMode>('custom');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [reminderTime, setReminderTime] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,7 +73,7 @@ export default function CreateRoutine() {
       setDescription(routine.description ?? '');
       setTargetCount(routine.target_count ?? 1);
       setRepeatMode(routine.schedule_type === 'specific_days' ? 'specific_days' : 'daily');
-      setSelectedDays(routine.days_of_week ?? []);
+      setSelectedDays(getRoutineRepeatDays(routine));
       setReminderTime(routine.reminder_time ?? '');
       setInitialLoading(false);
     };
@@ -78,9 +90,7 @@ export default function CreateRoutine() {
       return '요일을 선택해주세요';
     }
 
-    return WEEKDAY_OPTIONS.filter((day) => selectedDays.includes(day.key))
-      .map((day) => day.label)
-      .join(' · ');
+    return formatDaysOfWeek(selectedDays);
   }, [repeatMode, selectedDays]);
 
   const toggleDay = (dayKey: RoutineDayKey) => {
@@ -89,12 +99,44 @@ export default function CreateRoutine() {
     );
   };
 
+  const applyRepeatPreset = (days: RoutineDayKey[]) => {
+    if (days.length === EVERYDAY_KEYS.length) {
+      setRepeatMode('daily');
+      setSelectedDays([]);
+      return;
+    }
+
+    setRepeatMode('specific_days');
+    setSelectedDays(days);
+  };
+
+  const applyTemplate = (templateId: string) => {
+    const template = ROUTINE_TEMPLATES.find((item) => item.id === templateId);
+
+    if (!template) {
+      return;
+    }
+
+    setCreateMode('template');
+    setSelectedTemplateId(template.id);
+    setTitle(template.title);
+    setDescription(template.description);
+    setTargetCount(template.target_count);
+    setReminderTime(template.reminder_time ?? '');
+    applyRepeatPreset(template.repeat_days);
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
 
     if (repeatMode === 'specific_days' && selectedDays.length === 0) {
       setError('특정 요일을 하나 이상 선택해주세요.');
+      return;
+    }
+
+    if (!title.trim()) {
+      setError('루틴 이름을 입력해주세요.');
       return;
     }
 
@@ -114,13 +156,15 @@ export default function CreateRoutine() {
 
     const payload = {
       user_id: user.id,
-      title,
+      title: title.trim(),
       description: description || null,
       frequency: repeatMode === 'daily' ? 'daily' : 'weekly',
       target_count: targetCount,
       schedule_type: repeatMode,
       days_of_week: repeatMode === 'specific_days' ? selectedDays : [],
+      repeat_days: repeatMode === 'specific_days' ? selectedDays : EVERYDAY_KEYS,
       reminder_time: reminderTime || null,
+      is_template: false,
     };
 
     if (isEditMode) {
@@ -176,6 +220,51 @@ export default function CreateRoutine() {
         </section>
 
         <form className="form-card" onSubmit={handleSubmit}>
+          {!isEditMode && (
+            <section className="template-mode-card">
+              <div className="repeat-toggle">
+                <button
+                  className={createMode === 'custom' ? 'repeat-option repeat-option-active' : 'repeat-option'}
+                  type="button"
+                  onClick={() => {
+                    setCreateMode('custom');
+                    setSelectedTemplateId('');
+                  }}
+                >
+                  직접 만들기
+                </button>
+                <button
+                  className={createMode === 'template' ? 'repeat-option repeat-option-active' : 'repeat-option'}
+                  type="button"
+                  onClick={() => setCreateMode('template')}
+                >
+                  템플릿으로 추가
+                </button>
+              </div>
+
+              {createMode === 'template' && (
+                <div className="template-grid">
+                  {ROUTINE_TEMPLATES.map((template) => (
+                    <button
+                      key={template.id}
+                      className={
+                        selectedTemplateId === template.id
+                          ? 'template-card template-card-active'
+                          : 'template-card'
+                      }
+                      type="button"
+                      onClick={() => applyTemplate(template.id)}
+                    >
+                      <strong>{template.title}</strong>
+                      <span>{template.description}</span>
+                      <em>{formatDaysOfWeek(template.repeat_days)}</em>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           <label className="field-group" htmlFor="routine-title">
             <span>루틴 이름</span>
             <input
@@ -230,7 +319,7 @@ export default function CreateRoutine() {
                 <button
                   className={repeatMode === 'daily' ? 'repeat-option repeat-option-active' : 'repeat-option'}
                   type="button"
-                  onClick={() => setRepeatMode('daily')}
+                  onClick={() => applyRepeatPreset(EVERYDAY_KEYS)}
                 >
                   매일
                 </button>
@@ -242,6 +331,17 @@ export default function CreateRoutine() {
                   onClick={() => setRepeatMode('specific_days')}
                 >
                   특정 요일만
+                </button>
+              </div>
+              <div className="repeat-preset-row">
+                <button type="button" onClick={() => applyRepeatPreset(EVERYDAY_KEYS)}>
+                  매일
+                </button>
+                <button type="button" onClick={() => applyRepeatPreset(WEEKDAY_KEYS)}>
+                  평일
+                </button>
+                <button type="button" onClick={() => applyRepeatPreset(['mon', 'wed', 'fri'])}>
+                  월/수/금
                 </button>
               </div>
             </div>

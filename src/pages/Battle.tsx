@@ -9,15 +9,17 @@ import {
   formatSelfSubject,
 } from '../lib/nameDisplay';
 import {
-  CheckinRow,
   FriendshipRow,
   NudgeRow,
   ProfileRow,
+  RoutineLogRow,
+  RoutineRow,
   SharedGoalCheckinRow,
   SharedGoalRow,
   calculateBattleScores,
   ensureProfile,
   fetchFriendConnection,
+  fetchRoutineLogsForUsers,
   filterSharedGoalsForPair,
   getTodayKey,
 } from '../lib/mvp';
@@ -107,7 +109,8 @@ export default function Battle() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
   const [battleMeta, setBattleMeta] = useState<FriendshipRow | null>(null);
-  const [checkins, setCheckins] = useState<CheckinRow[]>([]);
+  const [routineLogs, setRoutineLogs] = useState<RoutineLogRow[]>([]);
+  const [routines, setRoutines] = useState<RoutineRow[]>([]);
   const [sharedGoals, setSharedGoals] = useState<SharedGoalRow[]>([]);
   const [sharedGoalCheckins, setSharedGoalCheckins] = useState<SharedGoalCheckinRow[]>([]);
   const [nudges, setNudges] = useState<NudgeRow[]>([]);
@@ -151,7 +154,8 @@ export default function Battle() {
         setBattleMeta(connection.friendship);
 
         if (!connection.friendProfile) {
-          setCheckins([]);
+          setRoutineLogs([]);
+          setRoutines([]);
           setSharedGoals([]);
           setSharedGoalCheckins([]);
           setNudges([]);
@@ -161,17 +165,23 @@ export default function Battle() {
 
         const relatedUserIds = [user.id, connection.friendProfile.id];
 
-        const { data: checkinData, error: checkinError } = await supabase
-          .from('checkins')
-          .select('user_id, routine_id, check_in_date')
+        const { data: routineData, error: routineError } = await supabase
+          .from('routines')
+          .select('*')
           .in('user_id', relatedUserIds);
 
-        if (checkinError) {
-          throw checkinError;
+        if (routineError) {
+          throw routineError;
         }
 
         if (active) {
-          setCheckins((checkinData as CheckinRow[]) ?? []);
+          setRoutines(((routineData as RoutineRow[]) ?? []).filter((routine) => !routine.is_template));
+        }
+
+        const logData = await fetchRoutineLogsForUsers(relatedUserIds);
+
+        if (active) {
+          setRoutineLogs(logData);
         }
 
         const { data: sharedGoalData, error: sharedGoalError } = await supabase
@@ -263,11 +273,12 @@ export default function Battle() {
     return calculateBattleScores({
       currentUserId: userId,
       friendId: friendProfile?.id ?? null,
-      checkins,
+      checkins: routineLogs,
       sharedGoalCheckins,
       sharedGoals,
+      routines,
     });
-  }, [checkins, friendProfile?.id, sharedGoalCheckins, sharedGoals, userId]);
+  }, [friendProfile?.id, routineLogs, routines, sharedGoalCheckins, sharedGoals, userId]);
 
   const sharedGoalViews = useMemo<SharedGoalView[]>(() => {
     if (!friendProfile) {
@@ -315,6 +326,21 @@ export default function Battle() {
     : 'Save the battle name and wager in Friends to open the scoreboard and shared goals here.';
   const battleSetupAction = isKo ? '친구 탭에서 설정하기' : 'Set up in Friends';
   const scoreSuffix = isKo ? '점' : 'pts';
+  const achievementLeaderText =
+    battleSummary.weeklyPercentLeader === 'me'
+      ? isKo
+        ? `${profileLabel} 주간 달성률이 앞서요`
+        : `${profileLabel} is ahead by weekly rate`
+      : battleSummary.weeklyPercentLeader === 'friend'
+        ? isKo
+          ? `${opponentLabel} 주간 달성률이 앞서요`
+          : `${opponentLabel} is ahead by weekly rate`
+        : battleSummary.weeklyPercentLeader === 'tied'
+          ? isKo
+            ? '주간 달성률은 동점이에요'
+            : 'Weekly rate is tied'
+          : t('battle.statusWaiting');
+  const achievementLine = `${profileLabel} ${battleSummary.myWeeklyPercent}% · ${opponentLabel} ${battleSummary.friendWeeklyPercent}%`;
 
   const handleCreateSharedGoal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -524,17 +550,19 @@ export default function Battle() {
 
               <section className="battle-score-strip">
                 <article className="score-panel">
-                  <span>{profileLabel}</span>
-                  <strong>{`${battleSummary.myScore} ${scoreSuffix}`}</strong>
+                  <span>{isKo ? '내 달성률' : 'My achievement'}</span>
+                  <strong>{`${battleSummary.myWeeklyPercent}%`}</strong>
+                  <p>{`${battleSummary.myScore} ${scoreSuffix}`}</p>
                 </article>
                 <article className="score-panel">
-                  <span>{opponentLabel}</span>
-                  <strong>{`${battleSummary.friendScore} ${scoreSuffix}`}</strong>
+                  <span>{isKo ? '친구 달성률' : 'Friend achievement'}</span>
+                  <strong>{`${battleSummary.friendWeeklyPercent}%`}</strong>
+                  <p>{`${battleSummary.friendScore} ${scoreSuffix}`}</p>
                 </article>
                 <article className="score-summary-card">
-                  <span>{t('battle.scoreboardBonus')}</span>
-                  <strong>+{battleSummary.sharedBonusCount}</strong>
-                  <p>{t('battle.heroStatus', { status: heroStatus })}</p>
+                  <span>{isKo ? '이번 주 리더' : 'Weekly leader'}</span>
+                  <strong>{achievementLeaderText}</strong>
+                  <p>{achievementLine}</p>
                 </article>
               </section>
 

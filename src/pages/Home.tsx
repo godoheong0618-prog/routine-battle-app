@@ -10,25 +10,33 @@ import {
   normalizeDisplayName,
 } from '../lib/nameDisplay';
 import {
-  CheckinRow,
   FriendshipRow,
   ProfileRow,
+  RoutineLogRow,
   RoutineRow,
+  RoutineStatus,
   SharedGoalCheckinRow,
   SharedGoalRow,
   calculateBattleScores,
+  calculateRoutineStats,
   calculateStreak,
   ensureProfile,
   fetchFriendConnection,
+  fetchRoutineLogsForUsers,
   filterSharedGoalsForPair,
+  formatRoutineSchedule,
+  getLastDateKeys,
   getTodayDayKey,
   getTodayKey,
+  getWeekDateKeys,
   isRoutineVisibleToday,
+  normalizeRoutineStatus,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
 type PersonalGoalView = RoutineRow & {
-  completed: boolean;
+  status: RoutineStatus;
+  note: string;
   meta: string;
 };
 
@@ -79,7 +87,9 @@ export default function Home() {
   const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
   const [battleMeta, setBattleMeta] = useState<FriendshipRow | null>(null);
   const [routines, setRoutines] = useState<RoutineRow[]>([]);
-  const [checkins, setCheckins] = useState<CheckinRow[]>([]);
+  const [friendRoutines, setFriendRoutines] = useState<RoutineRow[]>([]);
+  const [routineLogs, setRoutineLogs] = useState<RoutineLogRow[]>([]);
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [sharedGoals, setSharedGoals] = useState<SharedGoalRow[]>([]);
   const [sharedGoalCheckins, setSharedGoalCheckins] = useState<SharedGoalCheckinRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,15 +168,20 @@ export default function Home() {
         setBattleMeta(null);
       }
 
+      const relatedUserIds = currentFriend ? [user.id, currentFriend.id] : [user.id];
+
       try {
-        const { data, error } = await supabase.from('routines').select('*').eq('user_id', user.id);
+        const { data, error } = await supabase.from('routines').select('*').in('user_id', relatedUserIds);
 
         if (error) {
           throw error;
         }
 
+        const loadedRoutines = ((data as RoutineRow[]) ?? []).filter((routine) => !routine.is_template);
+
         if (active) {
-          setRoutines((data as RoutineRow[]) ?? []);
+          setRoutines(loadedRoutines.filter((routine) => routine.user_id === user.id));
+          setFriendRoutines(currentFriend ? loadedRoutines.filter((routine) => routine.user_id === currentFriend.id) : []);
         }
       } catch (loadError) {
         console.warn('Home routines load failed:', loadError);
@@ -174,30 +189,22 @@ export default function Home() {
 
         if (active) {
           setRoutines([]);
+          setFriendRoutines([]);
         }
       }
 
-      const relatedUserIds = currentFriend ? [user.id, currentFriend.id] : [user.id];
-
       try {
-        const { data, error } = await supabase
-          .from('checkins')
-          .select('user_id, routine_id, check_in_date')
-          .in('user_id', relatedUserIds);
-
-        if (error) {
-          throw error;
-        }
+        const data = await fetchRoutineLogsForUsers(relatedUserIds);
 
         if (active) {
-          setCheckins((data as CheckinRow[]) ?? []);
+          setRoutineLogs(data);
         }
       } catch (loadError) {
-        console.warn('Home checkins load failed:', loadError);
+        console.warn('Home routine logs load failed:', loadError);
         loadNotice = loadNotice || t('home.loadHistoryError');
 
         if (active) {
-          setCheckins([]);
+          setRoutineLogs([]);
         }
       }
 
@@ -280,41 +287,68 @@ export default function Home() {
     [routines, todayDayKey]
   );
 
-  const myCheckins = useMemo(
-    () => checkins.filter((checkin) => checkin.user_id === userId),
-    [checkins, userId]
+  const myRoutineLogs = useMemo(
+    () => routineLogs.filter((log) => log.user_id === userId),
+    [routineLogs, userId]
   );
 
-  const completedRoutineIds = useMemo(() => {
-    return new Set(
-      myCheckins
-        .filter((checkin) => checkin.check_in_date === todayKey)
-        .map((checkin) => String(checkin.routine_id))
+  const todayLogByRoutineId = useMemo(() => {
+    return new Map(
+      myRoutineLogs
+        .filter((log) => log.log_date === todayKey)
+        .map((log) => [String(log.routine_id), log])
     );
-  }, [myCheckins, todayKey]);
+  }, [myRoutineLogs, todayKey]);
 
   const personalGoals = useMemo<PersonalGoalView[]>(() => {
-    return todayRoutines.map((routine) => ({
-      ...routine,
-      completed: completedRoutineIds.has(String(routine.id)),
-      meta: routine.description || t('home.goalMeta', { count: routine.target_count ?? 1 }),
-    }));
-  }, [completedRoutineIds, t, todayRoutines]);
+    return todayRoutines.map((routine) => {
+      const log = todayLogByRoutineId.get(String(routine.id));
+      const scheduleText = formatRoutineSchedule(routine);
+      const targetText = t('home.goalMeta', { count: routine.target_count ?? 1 });
+
+      return {
+        ...routine,
+        status: log ? normalizeRoutineStatus(log.status) : 'pending',
+        note: log?.note ?? '',
+        meta: routine.description || `${scheduleText} · ${targetText}`,
+      };
+    });
+  }, [t, todayLogByRoutineId, todayRoutines]);
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
       currentUserId: userId,
       friendId: friendProfile?.id ?? null,
-      checkins,
+      checkins: routineLogs,
       sharedGoalCheckins,
       sharedGoals,
+      routines: [...routines, ...friendRoutines],
     });
-  }, [checkins, friendProfile?.id, sharedGoalCheckins, sharedGoals, userId]);
+  }, [friendProfile?.id, friendRoutines, routineLogs, routines, sharedGoalCheckins, sharedGoals, userId]);
 
-  const streak = useMemo(() => calculateStreak(myCheckins), [myCheckins]);
-  const completedCount = personalGoals.filter((goal) => goal.completed).length;
-  const remainingCount = Math.max(personalGoals.length - completedCount, 0);
-  const progress = personalGoals.length === 0 ? 0 : Math.round((completedCount / personalGoals.length) * 100);
+  const streak = useMemo(() => calculateStreak(myRoutineLogs), [myRoutineLogs]);
+  const weekStats = useMemo(
+    () => calculateRoutineStats(routines, routineLogs, userId, getWeekDateKeys()),
+    [routineLogs, routines, userId]
+  );
+  const friendWeekStats = useMemo(
+    () =>
+      friendProfile
+        ? calculateRoutineStats(friendRoutines, routineLogs, friendProfile.id, getWeekDateKeys())
+        : null,
+    [friendProfile, friendRoutines, routineLogs]
+  );
+  const recentSevenStats = useMemo(
+    () => calculateRoutineStats(routines, routineLogs, userId, getLastDateKeys(7)),
+    [routineLogs, routines, userId]
+  );
+  const todayStats = useMemo(
+    () => calculateRoutineStats(routines, routineLogs, userId, [todayKey]),
+    [routineLogs, routines, todayKey, userId]
+  );
+  const completedCount = personalGoals.filter((goal) => goal.status === 'done').length;
+  const remainingCount = personalGoals.filter((goal) => goal.status === 'pending').length;
+  const progress = todayStats.percent;
   const hasBattleStarted = Boolean(friendProfile && battleMeta?.battle_started_at);
 
   const battleHeadline = getBattleHeadline({
@@ -333,12 +367,12 @@ export default function Home() {
       : t('home.battleDifference', { points: Math.abs(battleSummary.difference) });
 
   const battleScoreLine = friendProfile
-    ? t('home.battleBarScoreLine', {
+    ? `${t('home.battleBarScoreLine', {
         me: profileLabel,
         myScore: battleSummary.myScore,
         friend: friendLabel,
         friendScore: battleSummary.friendScore,
-      })
+      })} · ${profileLabel} ${battleSummary.myWeeklyPercent}% / ${friendLabel} ${battleSummary.friendWeeklyPercent}%`
     : '';
 
   const battleWagerText = battleMeta?.wager_text?.trim()
@@ -352,12 +386,35 @@ export default function Home() {
   const battleSetupAction = isKo ? '배틀 설정하기' : 'Set up battle';
   const battleChipText = !friendProfile ? t('home.battleWaiting') : hasBattleStarted ? battleDifferenceText : isKo ? '설정 필요' : 'Setup needed';
   const scoreSuffix = isKo ? '점' : 'pts';
+  const weekPercentLabel = isKo ? '이번 주 달성률' : 'Weekly achievement';
+  const weekSummaryTitle = isKo ? `${weekStats.percent}% 달성 중` : `${weekStats.percent}% this week`;
+  const weekSummarySubtitle =
+    personalGoals.length === 0
+      ? t('home.summaryEmpty')
+      : isKo
+        ? `오늘 ${progress}% · 현재 ${streak}일 연속`
+        : `Today ${progress}% · ${streak}-day streak`;
+  const friendWeekLabel = friendWeekStats
+    ? isKo
+      ? `${friendLabel} ${friendWeekStats.percent}%`
+      : `${friendLabel} ${friendWeekStats.percent}%`
+    : t('home.battleWaiting');
+  const statusLabels: Record<RoutineStatus, string> = {
+    pending: isKo ? '대기' : 'Pending',
+    done: isKo ? '완료' : 'Done',
+    partial: isKo ? '조금 함' : 'Partial',
+    rest: isKo ? '오늘 쉼' : 'Rest',
+  };
 
   const showToast = (message: string) => {
     setToast({ id: Date.now(), message });
   };
 
-  const handleToggleRoutine = async (routineId: string) => {
+  const handleSetRoutineStatus = async (
+    routineId: string,
+    status: RoutineStatus,
+    options: { toggleSame?: boolean } = {}
+  ) => {
     if (!userId) {
       navigate('/login');
       return;
@@ -365,76 +422,68 @@ export default function Home() {
 
     const routineKey = String(routineId);
     const actionKey = `routine-${routineId}`;
-    const alreadyCompleted = completedRoutineIds.has(routineKey);
-    const optimisticCheckin: CheckinRow = {
+    const existingLog = todayLogByRoutineId.get(routineKey);
+    const shouldToggleSame = options.toggleSame ?? true;
+    const nextStatus =
+      shouldToggleSame && existingLog && normalizeRoutineStatus(existingLog.status) === status ? 'pending' : status;
+    const nextNote = (noteDrafts[routineKey] ?? existingLog?.note ?? '').trim();
+    const optimisticLog: RoutineLogRow = {
       user_id: userId,
       routine_id: routineId,
-      check_in_date: todayKey,
+      log_date: todayKey,
+      status: nextStatus,
+      note: nextNote || null,
     };
-    const previousCheckins = checkins;
+    const previousLogs = routineLogs;
 
     setPendingAction(actionKey);
-    setCheckins((current) => {
-      if (alreadyCompleted) {
-        return current.filter(
-          (checkin) =>
-            !(
-              checkin.user_id === userId &&
-              String(checkin.routine_id) === routineKey &&
-              checkin.check_in_date === todayKey
-            )
+    setRoutineLogs((current) => {
+      const exists = current.some(
+        (log) => log.user_id === userId && String(log.routine_id) === routineKey && log.log_date === todayKey
+      );
+
+      if (exists) {
+        return current.map((log) =>
+          log.user_id === userId && String(log.routine_id) === routineKey && log.log_date === todayKey
+            ? { ...log, ...optimisticLog }
+            : log
         );
       }
 
-      const exists = current.some(
-        (checkin) =>
-          checkin.user_id === userId &&
-          String(checkin.routine_id) === routineKey &&
-          checkin.check_in_date === todayKey
-      );
-
-      return exists ? current : [...current, optimisticCheckin];
+      return [...current, optimisticLog];
     });
 
-    let saveError: { code?: string } | null = null;
-
-    if (alreadyCompleted) {
-      saveError =
-        (
-          await supabase
-            .from('checkins')
-            .delete()
-            .eq('user_id', userId)
-            .eq('routine_id', routineId)
-            .eq('check_in_date', todayKey)
-        ).error ?? null;
-    } else {
-      saveError =
-        (
-          await supabase.from('checkins').upsert(optimisticCheckin, {
-            onConflict: 'user_id,routine_id,check_in_date',
-            ignoreDuplicates: false,
-          })
-        ).error ?? null;
-
-      if (saveError?.code === '42P10') {
-        saveError = (await supabase.from('checkins').insert(optimisticCheckin)).error ?? null;
-      }
-
-      if (saveError?.code === '23505') {
-        saveError = null;
-      }
-    }
+    const { error: saveError } = await supabase.from('routine_logs').upsert(optimisticLog, {
+      onConflict: 'user_id,routine_id,log_date',
+      ignoreDuplicates: false,
+    });
 
     if (saveError) {
-      console.warn('Routine checkin save failed:', saveError);
-      setCheckins(previousCheckins);
-      showToast(t('home.saveError'));
+      console.warn('Routine log save failed:', saveError);
+      setRoutineLogs(previousLogs);
+      showToast(
+        saveError.code === '42P01' || saveError.code === '42703'
+          ? isKo
+            ? 'routine_logs SQL을 먼저 적용해 주세요.'
+            : 'Apply the routine_logs SQL first.'
+          : t('home.saveError')
+      );
       setPendingAction('');
       return;
     }
 
     setPendingAction('');
+  };
+
+  const handleNoteBlur = async (goal: PersonalGoalView) => {
+    const routineKey = String(goal.id);
+    const nextNote = (noteDrafts[routineKey] ?? goal.note).trim();
+
+    if (nextNote === goal.note.trim()) {
+      return;
+    }
+
+    await handleSetRoutineStatus(goal.id, goal.status, { toggleSame: false });
   };
 
   const handleDeleteRoutine = async (routineId: string) => {
@@ -451,14 +500,14 @@ export default function Home() {
 
     setPendingAction(`delete-${routineId}`);
 
-    const { error: checkinDeleteError } = await supabase
-      .from('checkins')
+    const { error: logDeleteError } = await supabase
+      .from('routine_logs')
       .delete()
       .eq('user_id', userId)
       .eq('routine_id', routineId);
 
-    if (checkinDeleteError) {
-      console.warn('Routine checkins delete failed:', checkinDeleteError);
+    if (logDeleteError && logDeleteError.code !== '42P01' && logDeleteError.code !== '42703') {
+      console.warn('Routine logs delete failed:', logDeleteError);
     }
 
     const { error: routineDeleteError } = await supabase
@@ -475,8 +524,8 @@ export default function Home() {
     }
 
     setRoutines((current) => current.filter((routine) => routine.id !== routineId));
-    setCheckins((current) =>
-      current.filter((checkin) => !(checkin.user_id === userId && String(checkin.routine_id) === String(routineId)))
+    setRoutineLogs((current) =>
+      current.filter((log) => !(log.user_id === userId && String(log.routine_id) === String(routineId)))
     );
     showToast(t('home.deleteSuccess'));
     setPendingAction('');
@@ -579,20 +628,27 @@ export default function Home() {
           </article>
 
           <div className="home-progress-section">
-            <p className="section-eyebrow">{t('home.eyebrow')}</p>
-            <h1 className="home-streak-title">{t('home.summaryTitle', { done: completedCount, total: personalGoals.length })}</h1>
-            <p className="hero-subtitle">
-              {personalGoals.length === 0 ? t('home.summaryEmpty') : t('home.summaryProgress', { progress, streak })}
-            </p>
+            <p className="section-eyebrow">{weekPercentLabel}</p>
+            <h1 className="home-streak-title">{weekSummaryTitle}</h1>
+            <p className="hero-subtitle">{weekSummarySubtitle}</p>
           </div>
 
           <div className="progress-card progress-card-soft">
             <div className="progress-card-header">
-              <span>{t('home.progressLabel')}</span>
-              <strong>{progress}%</strong>
+              <span>{weekPercentLabel}</span>
+              <strong>{weekStats.percent}%</strong>
             </div>
             <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
+              <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
+            </div>
+            <div className="traffic-row" aria-label={isKo ? '최근 7일 상태' : 'Last 7 days'}>
+              {recentSevenStats.daily.map((day) => (
+                <span
+                  key={day.dateKey}
+                  className={`traffic-cell traffic-cell-${day.status}`}
+                  title={`${day.dateKey} ${day.percent}%`}
+                />
+              ))}
             </div>
           </div>
 
@@ -602,12 +658,12 @@ export default function Home() {
               <strong>{t('home.streakValue', { count: streak })}</strong>
             </article>
             <article className="summary-chip">
-              <span>{t('home.leftLabel')}</span>
+              <span>{isKo ? '오늘 남은 할 일' : t('home.leftLabel')}</span>
               <strong>{t('home.leftValue', { count: remainingCount })}</strong>
             </article>
             <article className="summary-chip">
-              <span>{t('home.battleLabel')}</span>
-              <strong>{battleChipText}</strong>
+              <span>{isKo ? '친구 주간률' : 'Friend week'}</span>
+              <strong>{friendWeekLabel}</strong>
             </article>
           </div>
         </header>
@@ -641,9 +697,21 @@ export default function Home() {
                 {personalGoals.map((goal) => (
                   <article
                     key={goal.id}
-                    className={goal.completed ? 'home-task-card home-task-card-completed' : 'home-task-card'}
+                    className={
+                      goal.status === 'done'
+                        ? 'home-task-card home-task-card-completed'
+                        : `home-task-card home-task-card-${goal.status}`
+                    }
                   >
-                    <div className={goal.completed ? 'goal-check goal-check-completed' : 'goal-check'}>{goal.completed ? '✓' : ''}</div>
+                    <div
+                      className={
+                        goal.status === 'done'
+                          ? 'goal-check goal-check-completed'
+                          : `goal-check goal-check-${goal.status}`
+                      }
+                    >
+                      {goal.status === 'done' ? '✓' : statusLabels[goal.status].slice(0, 1)}
+                    </div>
 
                     <div className="home-task-main">
                       <div className="home-task-top">
@@ -676,17 +744,51 @@ export default function Home() {
                       </div>
 
                       <div className="home-task-actions">
+                        {(['done', 'partial', 'rest'] as RoutineStatus[]).map((status) => (
+                          <button
+                            key={status}
+                            className={
+                              goal.status === status
+                                ? `routine-status-button routine-status-button-${status} routine-status-button-active`
+                                : `routine-status-button routine-status-button-${status}`
+                            }
+                            type="button"
+                            onClick={() => handleSetRoutineStatus(goal.id, status)}
+                            disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                          >
+                            {pendingAction === `routine-${goal.id}` ? t('home.saving') : statusLabels[status]}
+                          </button>
+                        ))}
+                      </div>
+
+                      <label className="routine-note-field" htmlFor={`routine-note-${goal.id}`}>
+                        <span>{isKo ? '메모' : 'Note'}</span>
+                        <input
+                          id={`routine-note-${goal.id}`}
+                          type="text"
+                          placeholder={isKo ? '짧은 메모를 남겨요' : 'Add a short note'}
+                          value={noteDrafts[goal.id] ?? goal.note}
+                          onChange={(event) =>
+                            setNoteDrafts((current) => ({
+                              ...current,
+                              [goal.id]: event.target.value,
+                            }))
+                          }
+                          onBlur={() => handleNoteBlur(goal)}
+                          disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                          maxLength={80}
+                        />
+                      </label>
+
+                      <div className="routine-card-footer">
+                        <span>{isKo ? `상태: ${statusLabels[goal.status]}` : `Status: ${statusLabels[goal.status]}`}</span>
                         <button
-                          className="primary-button home-task-button"
+                          className="secondary-button home-task-button"
                           type="button"
-                          onClick={() => handleToggleRoutine(goal.id)}
+                          onClick={() => handleSetRoutineStatus(goal.id, 'pending', { toggleSame: false })}
                           disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
                         >
-                          {pendingAction === `routine-${goal.id}`
-                            ? t('home.saving')
-                            : goal.completed
-                              ? t('home.undo')
-                              : t('home.complete')}
+                          {pendingAction === `routine-${goal.id}` ? t('home.saving') : t('home.undo')}
                         </button>
                       </div>
                     </div>

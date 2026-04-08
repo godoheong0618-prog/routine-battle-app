@@ -8,13 +8,14 @@ import {
   formatUserSubject,
 } from '../lib/nameDisplay';
 import {
-  CheckinRow,
   NudgeRow,
   ProfileRow,
+  RoutineLogRow,
   RoutineRow,
   SharedGoalCheckinRow,
   SharedGoalRow,
   ensureProfile,
+  fetchRoutineLogsForUsers,
   fetchProfile,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
@@ -32,7 +33,7 @@ export default function Feed() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
   const [friendRoutines, setFriendRoutines] = useState<RoutineRow[]>([]);
-  const [friendCheckins, setFriendCheckins] = useState<CheckinRow[]>([]);
+  const [friendCheckins, setFriendCheckins] = useState<RoutineLogRow[]>([]);
   const [sharedGoals, setSharedGoals] = useState<SharedGoalRow[]>([]);
   const [sharedGoalCheckins, setSharedGoalCheckins] = useState<SharedGoalCheckinRow[]>([]);
   const [nudges, setNudges] = useState<NudgeRow[]>([]);
@@ -77,7 +78,7 @@ export default function Feed() {
 
         const [routinesResult, checkinsResult, sharedGoalsResult, nudgesResult] = await Promise.allSettled([
           supabase.from('routines').select('*').eq('user_id', connectedFriend.id),
-          supabase.from('checkins').select('user_id, routine_id, check_in_date').eq('user_id', connectedFriend.id),
+          fetchRoutineLogsForUsers([connectedFriend.id]),
           supabase.from('shared_goals').select('*').or(`owner_id.eq.${user.id},friend_id.eq.${user.id}`),
           supabase
             .from('nudges')
@@ -95,8 +96,8 @@ export default function Feed() {
           console.warn('Feed optional routines load failed:', routinesResult);
         }
 
-        if (checkinsResult.status === 'fulfilled' && !checkinsResult.value.error) {
-          setFriendCheckins((checkinsResult.value.data as CheckinRow[]) ?? []);
+        if (checkinsResult.status === 'fulfilled') {
+          setFriendCheckins(checkinsResult.value);
         } else {
           console.warn('Feed optional checkins load failed:', checkinsResult);
         }
@@ -187,7 +188,7 @@ export default function Feed() {
     const goalMap = new Map(sharedGoals.map((goal) => [goal.id, goal.title]));
 
     const personalItems = friendCheckins.map((checkin) => ({
-      id: `routine-${checkin.routine_id}-${checkin.check_in_date}`,
+      id: `routine-${checkin.routine_id}-${checkin.log_date}`,
       title:
         locale === 'ko'
           ? `${friendSubject} 개인 목표를 완료했어요`
@@ -195,9 +196,9 @@ export default function Feed() {
       description:
         routineMap.get(checkin.routine_id) ||
         (locale === 'ko' ? '개인 루틴 완료' : 'Completed a personal routine'),
-      meta: checkin.check_in_date,
+      meta: checkin.log_date,
       emoji: '✓',
-      sortKey: `${checkin.check_in_date}T12:00:00`,
+      sortKey: `${checkin.log_date}T12:00:00`,
     }));
 
     const sharedItems = sharedGoalCheckins.map((checkin) => ({

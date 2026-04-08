@@ -10,6 +10,8 @@ export type ProfileRow = {
 
 export type RoutineDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type ScheduleType = 'daily' | 'specific_days';
+export type RoutineStatus = 'pending' | 'done' | 'partial' | 'rest';
+export type RoutineDayStatus = RoutineStatus | 'missed' | 'off';
 
 export type RoutineRow = {
   id: string;
@@ -20,14 +22,23 @@ export type RoutineRow = {
   target_count: number | null;
   schedule_type: ScheduleType | null;
   days_of_week: RoutineDayKey[] | null;
+  repeat_days?: RoutineDayKey[] | null;
   reminder_time: string | null;
+  is_template?: boolean | null;
 };
 
-export type CheckinRow = {
+export type RoutineLogRow = {
+  id?: string;
   user_id: string;
   routine_id: string;
-  check_in_date: string;
+  log_date: string;
+  status: RoutineStatus;
+  note: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
+
+export type CheckinRow = RoutineLogRow;
 
 export type SharedGoalRow = {
   id: string;
@@ -65,11 +76,15 @@ export type FriendshipRow = {
 
 export type BattleLeader = 'me' | 'friend' | 'tied' | 'waiting';
 
-const FRIENDSHIP_CORE_SELECT = 'id,user_id,friend_id,created_at';
+const FRIENDSHIP_BASE_SELECT = 'id,user_id,friend_id,created_at';
+const FRIENDSHIP_CORE_SELECT =
+  'id,user_id,friend_id,created_at,battle_title,wager_text,battle_status,battle_started_at';
 
 type DatedCheckin = {
+  log_date?: string | null;
   check_in_date?: string | null;
   check_date?: string | null;
+  status?: RoutineStatus | string | null;
 };
 
 export const WEEKDAY_OPTIONS: Array<{ key: RoutineDayKey; label: string }> = [
@@ -80,6 +95,75 @@ export const WEEKDAY_OPTIONS: Array<{ key: RoutineDayKey; label: string }> = [
   { key: 'fri', label: '금' },
   { key: 'sat', label: '토' },
   { key: 'sun', label: '일' },
+];
+
+export const WEEKDAY_KEYS: RoutineDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri'];
+export const EVERYDAY_KEYS: RoutineDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+export const ROUTINE_STATUS_LABELS: Record<RoutineStatus, { ko: string; en: string }> = {
+  pending: { ko: '대기', en: 'Pending' },
+  done: { ko: '완료', en: 'Done' },
+  partial: { ko: '조금 함', en: 'Partial' },
+  rest: { ko: '오늘 쉼', en: 'Rest' },
+};
+
+export const ROUTINE_STATUS_WEIGHT: Record<RoutineStatus, number> = {
+  pending: 0,
+  done: 1,
+  partial: 0.5,
+  rest: 0,
+};
+
+export type RoutineTemplate = {
+  id: string;
+  title: string;
+  description: string;
+  repeat_days: RoutineDayKey[];
+  reminder_time: string | null;
+  target_count: number;
+};
+
+export const ROUTINE_TEMPLATES: RoutineTemplate[] = [
+  {
+    id: 'study-30',
+    title: '공부 30분',
+    description: '타이머를 켜고 30분만 집중하기',
+    repeat_days: WEEKDAY_KEYS,
+    reminder_time: '20:00',
+    target_count: 1,
+  },
+  {
+    id: 'water-1l',
+    title: '물 1L 마시기',
+    description: '하루 동안 물 1L를 나누어 마시기',
+    repeat_days: EVERYDAY_KEYS,
+    reminder_time: '13:00',
+    target_count: 1,
+  },
+  {
+    id: 'sleep-before-11',
+    title: '11시 전 취침',
+    description: '밤 11시 전에 눕기',
+    repeat_days: EVERYDAY_KEYS,
+    reminder_time: '22:30',
+    target_count: 1,
+  },
+  {
+    id: 'workout-10',
+    title: '운동 10분',
+    description: '스트레칭이나 맨몸 운동 10분',
+    repeat_days: ['mon', 'wed', 'fri'],
+    reminder_time: '18:30',
+    target_count: 1,
+  },
+  {
+    id: 'english-20',
+    title: '영어 단어 20개',
+    description: '새 단어 20개 외우고 소리 내어 읽기',
+    repeat_days: WEEKDAY_KEYS,
+    reminder_time: '21:00',
+    target_count: 1,
+  },
 ];
 
 export function getDateKey(date = new Date()) {
@@ -94,13 +178,21 @@ export function getTodayKey() {
 }
 
 export function getCheckinDateValue(checkin: DatedCheckin) {
-  return checkin.check_in_date ?? checkin.check_date ?? '';
+  return checkin.log_date ?? checkin.check_in_date ?? checkin.check_date ?? '';
+}
+
+function parseDateKey(dateKey: string) {
+  return new Date(`${dateKey}T12:00:00`);
 }
 
 export function getTodayDayKey(date = new Date()): RoutineDayKey {
   const day = date.getDay();
   const keys: RoutineDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
   return keys[day];
+}
+
+export function getDayKeyForDateKey(dateKey: string) {
+  return getTodayDayKey(parseDateKey(dateKey));
 }
 
 export function getWeekStartKey(date = new Date()) {
@@ -117,8 +209,46 @@ export function getWeekEndKey(date = new Date()) {
   return getDateKey(end);
 }
 
+export function getLastDateKeys(count: number, endDate = new Date()) {
+  return Array.from({ length: count }, (_, index) => {
+    const cursor = new Date(endDate);
+    cursor.setDate(cursor.getDate() - (count - 1 - index));
+    return getDateKey(cursor);
+  });
+}
+
+export function getWeekDateKeys(date = new Date()) {
+  const start = new Date(date);
+  const dayOffset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - dayOffset);
+
+  return Array.from({ length: dayOffset + 1 }, (_, index) => {
+    const cursor = new Date(start);
+    cursor.setDate(start.getDate() + index);
+    return getDateKey(cursor);
+  });
+}
+
+export function normalizeRoutineStatus(status: string | null | undefined): RoutineStatus {
+  if (status === 'done' || status === 'partial' || status === 'rest' || status === 'pending') {
+    return status;
+  }
+
+  return 'done';
+}
+
+export function isPositiveRoutineStatus(status: string | null | undefined) {
+  const normalizedStatus = normalizeRoutineStatus(status);
+  return normalizedStatus === 'done' || normalizedStatus === 'partial';
+}
+
 export function calculateStreak(checkins: DatedCheckin[]) {
-  const uniqueDates = new Set(checkins.map((checkin) => getCheckinDateValue(checkin)).filter(Boolean));
+  const uniqueDates = new Set(
+    checkins
+      .filter((checkin) => isPositiveRoutineStatus(checkin.status ?? 'done'))
+      .map((checkin) => getCheckinDateValue(checkin))
+      .filter(Boolean)
+  );
   const cursor = new Date();
   let streak = 0;
 
@@ -139,8 +269,14 @@ export function normalizeFriendCode(value: string) {
 }
 
 export function isRoutineVisibleToday(routine: RoutineRow, today = getTodayDayKey()) {
-  if (routine.schedule_type === 'specific_days' && Array.isArray(routine.days_of_week)) {
-    return routine.days_of_week.includes(today);
+  if (routine.is_template) {
+    return false;
+  }
+
+  const repeatDays = getRoutineRepeatDays(routine);
+
+  if (routine.schedule_type === 'specific_days' && repeatDays.length > 0) {
+    return repeatDays.includes(today);
   }
 
   if (routine.schedule_type === 'daily') {
@@ -151,11 +287,20 @@ export function isRoutineVisibleToday(routine: RoutineRow, today = getTodayDayKe
     return true;
   }
 
-  if (routine.frequency === 'weekly' && Array.isArray(routine.days_of_week) && routine.days_of_week.length > 0) {
-    return routine.days_of_week.includes(today);
+  if (routine.frequency === 'weekly' && repeatDays.length > 0) {
+    return repeatDays.includes(today);
   }
 
   return true;
+}
+
+export function isRoutineVisibleOnDate(routine: RoutineRow, dateKey: string) {
+  return isRoutineVisibleToday(routine, getDayKeyForDateKey(dateKey));
+}
+
+export function getRoutineRepeatDays(routine: Pick<RoutineRow, 'days_of_week' | 'repeat_days'>) {
+  const repeatDays = routine.repeat_days ?? routine.days_of_week;
+  return Array.isArray(repeatDays) ? repeatDays : [];
 }
 
 export function formatDaysOfWeek(days: RoutineDayKey[] | null | undefined) {
@@ -170,10 +315,179 @@ export function formatDaysOfWeek(days: RoutineDayKey[] | null | undefined) {
 
 export function formatRoutineSchedule(routine: RoutineRow) {
   if (routine.schedule_type === 'specific_days') {
-    return formatDaysOfWeek(routine.days_of_week);
+    return formatDaysOfWeek(getRoutineRepeatDays(routine));
   }
 
   return '매일';
+}
+
+export type RoutineDailyStat = {
+  dateKey: string;
+  dayKey: RoutineDayKey;
+  total: number;
+  score: number;
+  percent: number;
+  status: RoutineDayStatus;
+};
+
+export type RoutineStats = {
+  daily: RoutineDailyStat[];
+  totalSlots: number;
+  score: number;
+  percent: number;
+  doneCount: number;
+  partialCount: number;
+  restCount: number;
+  pendingCount: number;
+  missedCount: number;
+};
+
+export function calculateRoutineStats(
+  routines: RoutineRow[],
+  routineLogs: RoutineLogRow[],
+  userId: string,
+  dateKeys = getWeekDateKeys()
+): RoutineStats {
+  const userRoutines = routines.filter((routine) => routine.user_id === userId && !routine.is_template);
+  const userLogs = routineLogs.filter((log) => log.user_id === userId);
+  const logMap = new Map(userLogs.map((log) => [`${log.routine_id}-${log.log_date}`, log]));
+
+  let totalSlots = 0;
+  let score = 0;
+  let doneCount = 0;
+  let partialCount = 0;
+  let restCount = 0;
+  let pendingCount = 0;
+  let missedCount = 0;
+
+  const daily = dateKeys.map((dateKey) => {
+    const scheduledRoutines = userRoutines.filter((routine) => isRoutineVisibleOnDate(routine, dateKey));
+    let dayScore = 0;
+    let dayDone = 0;
+    let dayPartial = 0;
+    let dayRest = 0;
+    let dayPending = 0;
+    let dayMissed = 0;
+
+    scheduledRoutines.forEach((routine) => {
+      const log = logMap.get(`${routine.id}-${dateKey}`);
+
+      if (!log) {
+        dayMissed += 1;
+        missedCount += 1;
+        return;
+      }
+
+      const status = normalizeRoutineStatus(log.status);
+      const statusScore = ROUTINE_STATUS_WEIGHT[status];
+      dayScore += statusScore;
+      score += statusScore;
+
+      if (status === 'done') {
+        dayDone += 1;
+        doneCount += 1;
+      } else if (status === 'partial') {
+        dayPartial += 1;
+        partialCount += 1;
+      } else if (status === 'rest') {
+        dayRest += 1;
+        restCount += 1;
+      } else {
+        dayPending += 1;
+        pendingCount += 1;
+      }
+    });
+
+    totalSlots += scheduledRoutines.length;
+
+    let status: RoutineDayStatus = 'off';
+
+    if (scheduledRoutines.length > 0) {
+      if (dayMissed > 0 || dayPending > 0) {
+        status = 'missed';
+      } else if (dayDone === scheduledRoutines.length) {
+        status = 'done';
+      } else if (dayPartial > 0) {
+        status = 'partial';
+      } else if (dayRest > 0) {
+        status = 'rest';
+      } else {
+        status = 'missed';
+      }
+    }
+
+    return {
+      dateKey,
+      dayKey: getDayKeyForDateKey(dateKey),
+      total: scheduledRoutines.length,
+      score: dayScore,
+      percent: scheduledRoutines.length === 0 ? 0 : Math.round((dayScore / scheduledRoutines.length) * 100),
+      status,
+    };
+  });
+
+  return {
+    daily,
+    totalSlots,
+    score,
+    percent: totalSlots === 0 ? 0 : Math.round((score / totalSlots) * 100),
+    doneCount,
+    partialCount,
+    restCount,
+    pendingCount,
+    missedCount,
+  };
+}
+
+function normalizeRoutineLogRow(row: Partial<RoutineLogRow> & { check_in_date?: string | null }) {
+  return {
+    id: row.id,
+    user_id: row.user_id ?? '',
+    routine_id: row.routine_id ?? '',
+    log_date: row.log_date ?? row.check_in_date ?? '',
+    status: normalizeRoutineStatus(row.status),
+    note: row.note ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export async function fetchRoutineLogsForUsers(userIds: string[]) {
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('routine_logs')
+    .select('id, user_id, routine_id, log_date, status, note, created_at, updated_at')
+    .in('user_id', userIds);
+
+  if (!error) {
+    return ((data as RoutineLogRow[] | null) ?? []).map(normalizeRoutineLogRow).filter((log) => log.log_date);
+  }
+
+  if (error.code !== '42P01' && error.code !== '42703') {
+    throw error;
+  }
+
+  const fallback = await supabase
+    .from('checkins')
+    .select('user_id, routine_id, check_in_date')
+    .in('user_id', userIds);
+
+  if (fallback.error) {
+    throw fallback.error;
+  }
+
+  return ((fallback.data as Array<{ user_id: string; routine_id: string; check_in_date: string }> | null) ?? []).map(
+    (row) => ({
+      user_id: row.user_id,
+      routine_id: row.routine_id,
+      log_date: row.check_in_date,
+      status: 'done' as RoutineStatus,
+      note: null,
+    })
+  );
 }
 
 function buildFriendshipPairFilter(firstUserId: string, secondUserId: string) {
@@ -204,7 +518,7 @@ export function isFriendshipBattleMetaMissing(error: { code?: string; message?: 
 async function resolveFriendshipFriendId(userId: string): Promise<string | null | undefined> {
   const { data, error } = await supabase
     .from('friendships')
-    .select(FRIENDSHIP_CORE_SELECT)
+    .select(FRIENDSHIP_BASE_SELECT)
     .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
     .limit(10);
 
@@ -343,11 +657,23 @@ export async function fetchFriendshipByUsers(firstUserId: string, secondUserId: 
     return null;
   }
 
-  const { data, error } = await supabase
+  const primaryResult = await supabase
     .from('friendships')
     .select(FRIENDSHIP_CORE_SELECT)
     .or(buildFriendshipPairFilter(firstUserId, secondUserId))
     .maybeSingle();
+  let data = primaryResult.data as Partial<FriendshipRow> | null;
+  let error = primaryResult.error;
+
+  if (isFriendshipBattleMetaMissing(error)) {
+    const fallback = await supabase
+      .from('friendships')
+      .select(FRIENDSHIP_BASE_SELECT)
+      .or(buildFriendshipPairFilter(firstUserId, secondUserId))
+      .maybeSingle();
+    data = fallback.data as Partial<FriendshipRow> | null;
+    error = fallback.error;
+  }
 
   if (error) {
     throw error;
@@ -501,6 +827,7 @@ type BattleScoreInput = {
   checkins: CheckinRow[];
   sharedGoalCheckins: SharedGoalCheckinRow[];
   sharedGoals: SharedGoalRow[];
+  routines?: RoutineRow[];
 };
 
 export function calculateBattleScores({
@@ -509,9 +836,11 @@ export function calculateBattleScores({
   checkins,
   sharedGoalCheckins,
   sharedGoals,
+  routines = [],
 }: BattleScoreInput) {
-  const weekStart = getWeekStartKey();
-  const weekEnd = getWeekEndKey();
+  const weekKeys = getWeekDateKeys();
+  const weekStart = weekKeys[0] ?? getWeekStartKey();
+  const weekEnd = weekKeys[weekKeys.length - 1] ?? getWeekEndKey();
   const pointsByGoal = new Map(sharedGoals.map((goal) => [goal.id, goal.points ?? 3]));
 
   const weekPersonal = checkins.filter((checkin) => {
@@ -523,9 +852,11 @@ export function calculateBattleScores({
     (checkin) => checkin.check_date >= weekStart && checkin.check_date <= weekEnd
   );
 
-  const myPersonalActions = weekPersonal.filter((checkin) => checkin.user_id === currentUserId).length;
+  const myPersonalActions = weekPersonal.filter(
+    (checkin) => checkin.user_id === currentUserId && isPositiveRoutineStatus(checkin.status)
+  ).length;
   const friendPersonalActions = friendId
-    ? weekPersonal.filter((checkin) => checkin.user_id === friendId).length
+    ? weekPersonal.filter((checkin) => checkin.user_id === friendId && isPositiveRoutineStatus(checkin.status)).length
     : 0;
 
   const mySharedCompletions = weekShared.filter((checkin) => checkin.user_id === currentUserId).length;
@@ -533,8 +864,14 @@ export function calculateBattleScores({
     ? weekShared.filter((checkin) => checkin.user_id === friendId).length
     : 0;
 
-  const myPersonalScore = myPersonalActions * 2;
-  const friendPersonalScore = friendPersonalActions * 2;
+  const myPersonalScore = weekPersonal
+    .filter((checkin) => checkin.user_id === currentUserId)
+    .reduce((sum, checkin) => sum + ROUTINE_STATUS_WEIGHT[normalizeRoutineStatus(checkin.status)] * 2, 0);
+  const friendPersonalScore = friendId
+    ? weekPersonal
+        .filter((checkin) => checkin.user_id === friendId)
+        .reduce((sum, checkin) => sum + ROUTINE_STATUS_WEIGHT[normalizeRoutineStatus(checkin.status)] * 2, 0)
+    : 0;
 
   const mySharedScore = weekShared
     .filter((checkin) => checkin.user_id === currentUserId)
@@ -572,6 +909,18 @@ export function calculateBattleScores({
   const friendScore = friendPersonalScore + friendSharedScore + friendBonus;
   const difference = myScore - friendScore;
   const leader: BattleLeader = !friendId ? 'waiting' : difference > 0 ? 'me' : difference < 0 ? 'friend' : 'tied';
+  const myWeeklyStats = calculateRoutineStats(routines, checkins, currentUserId, weekKeys);
+  const friendWeeklyStats = friendId
+    ? calculateRoutineStats(routines, checkins, friendId, weekKeys)
+    : calculateRoutineStats([], [], '', weekKeys);
+  const weeklyPercentDifference = myWeeklyStats.percent - friendWeeklyStats.percent;
+  const weeklyPercentLeader: BattleLeader = !friendId
+    ? 'waiting'
+    : weeklyPercentDifference > 0
+      ? 'me'
+      : weeklyPercentDifference < 0
+        ? 'friend'
+        : 'tied';
 
   return {
     myScore,
@@ -583,5 +932,9 @@ export function calculateBattleScores({
     mySharedCompletions,
     friendSharedCompletions,
     sharedBonusCount,
+    myWeeklyPercent: myWeeklyStats.percent,
+    friendWeeklyPercent: friendWeeklyStats.percent,
+    weeklyPercentDifference,
+    weeklyPercentLeader,
   };
 }
