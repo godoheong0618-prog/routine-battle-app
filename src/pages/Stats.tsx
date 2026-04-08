@@ -107,6 +107,7 @@ export default function Stats() {
     [friendProfile, friendRoutines, routineLogs]
   );
   const streak = useMemo(() => calculateStreak(myLogs), [myLogs]);
+  const friendPercent = friendWeekStats?.percent ?? 0;
 
   if (loading) {
     return (
@@ -181,14 +182,24 @@ export default function Stats() {
               </div>
             </div>
 
-            <div className="stats-compare-card">
+            <div className="stats-compare-card stats-compare-bars">
               <article>
-                <span>{profileLabel}</span>
-                <strong>{weekStats.percent}%</strong>
+                <div className="stats-compare-row">
+                  <span>{profileLabel}</span>
+                  <strong>{weekStats.percent}%</strong>
+                </div>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
+                </div>
               </article>
               <article>
-                <span>{friendLabel}</span>
-                <strong>{friendWeekStats ? `${friendWeekStats.percent}%` : '-'}</strong>
+                <div className="stats-compare-row">
+                  <span>{friendLabel}</span>
+                  <strong>{friendWeekStats ? `${friendPercent}%` : '-'}</strong>
+                </div>
+                <div className="progress-track">
+                  <div className="progress-fill progress-fill-muted" style={{ width: `${friendPercent}%` }} />
+                </div>
               </article>
             </div>
           </section>

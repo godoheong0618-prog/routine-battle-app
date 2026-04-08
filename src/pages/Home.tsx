@@ -20,17 +20,14 @@ import {
   SharedGoalRow,
   calculateBattleScores,
   calculateRoutineStats,
-  calculateStreak,
   ensureProfile,
   fetchFriendConnection,
   fetchRoutineLogsForUsers,
   filterSharedGoalsForPair,
   formatRoutineSchedule,
-  getLastDateKeys,
   getTodayDayKey,
   getTodayKey,
   getWeekDateKeys,
-  getWeekEndKey,
   isRoutineVisibleToday,
   normalizeRoutineStatus,
 } from '../lib/mvp';
@@ -99,6 +96,7 @@ export default function Home() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [routineSheetOpen, setRoutineSheetOpen] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<RoutineRow | null>(null);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
   const { locale, t } = useLanguage();
   const isKo = locale === 'ko';
@@ -330,29 +328,12 @@ export default function Home() {
     });
   }, [friendProfile?.id, friendRoutines, routineLogs, routines, sharedGoalCheckins, sharedGoals, userId]);
 
-  const streak = useMemo(() => calculateStreak(myRoutineLogs), [myRoutineLogs]);
   const weekStats = useMemo(
     () => calculateRoutineStats(routines, routineLogs, userId, getWeekDateKeys()),
     [routineLogs, routines, userId]
   );
-  const friendWeekStats = useMemo(
-    () =>
-      friendProfile
-        ? calculateRoutineStats(friendRoutines, routineLogs, friendProfile.id, getWeekDateKeys())
-        : null,
-    [friendProfile, friendRoutines, routineLogs]
-  );
-  const recentSevenStats = useMemo(
-    () => calculateRoutineStats(routines, routineLogs, userId, getLastDateKeys(7)),
-    [routineLogs, routines, userId]
-  );
-  const todayStats = useMemo(
-    () => calculateRoutineStats(routines, routineLogs, userId, [todayKey]),
-    [routineLogs, routines, todayKey, userId]
-  );
   const completedCount = personalGoals.filter((goal) => goal.status === 'done').length;
   const remainingCount = personalGoals.filter((goal) => goal.status === 'pending').length;
-  const progress = todayStats.percent;
   const hasBattleStarted = Boolean(friendProfile && battleMeta?.battle_started_at);
 
   const battleHeadline = getBattleHeadline({
@@ -389,13 +370,21 @@ export default function Home() {
     : `You are connected with ${friendLabel}. Add a battle name and wager in Friends to show the summary here.`;
   const battleSetupAction = isKo ? '배틀 설정하기' : 'Set up battle';
   const scoreSuffix = isKo ? '점' : 'pts';
-  const weekEndDate = useMemo(() => new Date(`${getWeekEndKey()}T12:00:00`), []);
-  const battleDaysLeft = Math.max(
-    Math.ceil((weekEndDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)),
-    0
-  );
-  const weekPercentLabel = isKo ? '이번 주 달성률' : 'Weekly achievement';
-  const weekSummaryTitle = isKo ? `${weekStats.percent}% 달성 중` : `${weekStats.percent}% this week`;
+  const battleStateLabel = !friendProfile
+    ? isKo
+      ? '친구 없음'
+      : 'No friend'
+    : battleSummary.weeklyPercentLeader === 'me'
+      ? isKo
+        ? '앞서는 중'
+        : 'Leading'
+      : battleSummary.weeklyPercentLeader === 'friend'
+        ? isKo
+          ? '뒤지는 중'
+          : 'Behind'
+        : isKo
+          ? '동점'
+          : 'Tied';
   const todayHeroTitle = isKo
     ? `오늘 ${completedCount}/${personalGoals.length} 완료`
     : `Today ${completedCount}/${personalGoals.length} done`;
@@ -405,27 +394,16 @@ export default function Home() {
       : 'Connect a friend to see battle status here.'
     : hasBattleStarted
       ? isKo
-        ? `이번 주 배틀 종료까지 ${battleDaysLeft}일 남았어요.`
-        : `${battleDaysLeft} days left in this week battle.`
+        ? `${profileLabel} ${battleSummary.myWeeklyPercent}% · ${friendLabel} ${battleSummary.friendWeeklyPercent}%`
+        : `${profileLabel} ${battleSummary.myWeeklyPercent}% · ${friendLabel} ${battleSummary.friendWeeklyPercent}%`
       : isKo
         ? `${friendLabel}와 연결됨 · 배틀 설정 전`
         : `Connected with ${friendLabel} · setup needed`;
-  const weekSummarySubtitle =
-    personalGoals.length === 0
-      ? t('home.summaryEmpty')
-      : isKo
-        ? `오늘 ${progress}% · 현재 ${streak}일 연속`
-        : `Today ${progress}% · ${streak}-day streak`;
-  const friendWeekLabel = friendWeekStats
-    ? isKo
-      ? `${friendLabel} ${friendWeekStats.percent}%`
-      : `${friendLabel} ${friendWeekStats.percent}%`
-    : t('home.battleWaiting');
   const statusLabels: Record<RoutineStatus, string> = {
     pending: isKo ? '대기' : 'Pending',
     done: isKo ? '완료' : 'Done',
-    partial: isKo ? '조금 함' : 'Partial',
-    rest: isKo ? '오늘 쉼' : 'Rest',
+    partial: isKo ? '부분 완료' : 'Partial',
+    rest: isKo ? '쉬는 날' : 'Rest',
   };
 
   const showToast = (message: string) => {
@@ -562,6 +540,13 @@ export default function Home() {
     await handleSetRoutineStatus(goal.id, goal.status, { toggleSame: false });
   };
 
+  const toggleNote = (routineId: string) => {
+    setExpandedNotes((current) => ({
+      ...current,
+      [routineId]: !current[routineId],
+    }));
+  };
+
   const handleDeleteRoutine = async (routineId: string) => {
     if (!userId) {
       navigate('/login');
@@ -651,119 +636,11 @@ export default function Home() {
                 <strong>{completedCount}</strong>
               </article>
               <article>
-                <span>{isKo ? '주간률' : 'Week'}</span>
-                <strong>{weekStats.percent}%</strong>
+                <span>{isKo ? '친구 대비' : 'Battle'}</span>
+                <strong>{battleStateLabel}</strong>
               </article>
             </div>
           </section>
-
-          <article
-            className={
-              hasBattleStarted
-                ? battleSummary.leader === 'me'
-                  ? 'battle-summary-bar battle-summary-bar-leading'
-                  : battleSummary.leader === 'friend'
-                    ? 'battle-summary-bar battle-summary-bar-trailing'
-                    : 'battle-summary-bar battle-summary-bar-tied'
-                : 'battle-summary-bar'
-            }
-          >
-            {!friendProfile ? (
-              <div className="battle-summary-bar-empty">
-                <div>
-                  <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
-                  <h3 className="battle-summary-bar-title">{t('home.battleBarNoFriendTitle')}</h3>
-                  <p className="battle-summary-bar-copy">{t('home.battleBarNoFriendBody')}</p>
-                </div>
-
-                <Link className="inline-action-link inline-action-link-light" to="/friends">
-                  {t('home.battleBarConnect')}
-                </Link>
-              </div>
-            ) : !hasBattleStarted ? (
-              <div className="battle-summary-bar-empty">
-                <div>
-                  <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
-                  <h3 className="battle-summary-bar-title">{battleSetupTitle}</h3>
-                  <p className="battle-summary-bar-copy">{battleSetupBody}</p>
-                </div>
-
-                <Link className="inline-action-link inline-action-link-light" to="/friends">
-                  {battleSetupAction}
-                </Link>
-              </div>
-            ) : (
-              <>
-                <div className="battle-summary-bar-top">
-                  <div>
-                    <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
-                    <h3 className="battle-summary-bar-title">{battleHeadline}</h3>
-                    <p className="battle-summary-bar-copy">{battleScoreLine}</p>
-                  </div>
-
-                  <Link className="inline-action-link inline-action-link-light" to="/battle">
-                    {t('home.battleBarCta')}
-                  </Link>
-                </div>
-
-                <div className="battle-summary-bar-score-grid">
-                  <article className="battle-summary-score">
-                    <span>{profileLabel}</span>
-                    <strong>{`${battleSummary.myScore}${scoreSuffix}`}</strong>
-                  </article>
-                  <article className="battle-summary-score">
-                    <span>{friendLabel}</span>
-                    <strong>{`${battleSummary.friendScore}${scoreSuffix}`}</strong>
-                  </article>
-                </div>
-
-                <div className="battle-summary-bar-meta">
-                  <span className="battle-meta-pill">{battleDifferenceText}</span>
-                  <span className="battle-meta-pill">{battleWagerText}</span>
-                </div>
-              </>
-            )}
-          </article>
-
-          <div className="home-progress-section">
-            <p className="section-eyebrow">{weekPercentLabel}</p>
-            <h1 className="home-streak-title">{weekSummaryTitle}</h1>
-            <p className="hero-subtitle">{weekSummarySubtitle}</p>
-          </div>
-
-          <div className="progress-card progress-card-soft">
-            <div className="progress-card-header">
-              <span>{weekPercentLabel}</span>
-              <strong>{weekStats.percent}%</strong>
-            </div>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
-            </div>
-            <div className="traffic-row" aria-label={isKo ? '최근 7일 상태' : 'Last 7 days'}>
-              {recentSevenStats.daily.map((day) => (
-                <span
-                  key={day.dateKey}
-                  className={`traffic-cell traffic-cell-${day.status}`}
-                  title={`${day.dateKey} ${day.percent}%`}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="summary-chip-row">
-            <article className="summary-chip">
-              <span>{t('home.streakLabel')}</span>
-              <strong>{t('home.streakValue', { count: streak })}</strong>
-            </article>
-            <article className="summary-chip">
-              <span>{isKo ? '오늘 남은 할 일' : t('home.leftLabel')}</span>
-              <strong>{t('home.leftValue', { count: remainingCount })}</strong>
-            </article>
-            <article className="summary-chip">
-              <span>{isKo ? '친구 주간률' : 'Friend week'}</span>
-              <strong>{friendWeekLabel}</strong>
-            </article>
-          </div>
         </header>
 
         <main className="home-content home-content-polished">
@@ -799,25 +676,20 @@ export default function Home() {
                     key={goal.id}
                     className={
                       goal.status === 'done'
-                        ? 'home-task-card home-task-card-completed'
-                        : `home-task-card home-task-card-${goal.status}`
+                        ? 'home-task-card home-task-card-compact home-task-card-completed'
+                        : `home-task-card home-task-card-compact home-task-card-${goal.status}`
                     }
                   >
-                    <div
-                      className={
-                        goal.status === 'done'
-                          ? 'goal-check goal-check-completed'
-                          : `goal-check goal-check-${goal.status}`
-                      }
-                    >
-                      {goal.status === 'done' ? '✓' : statusLabels[goal.status].slice(0, 1)}
-                    </div>
-
                     <div className="home-task-main">
                       <div className="home-task-top">
                         <div className="goal-copy">
                           <h3>{goal.title}</h3>
-                          <p>{goal.meta}</p>
+                          <div className="routine-chip-row">
+                            <span>{formatRoutineSchedule(goal)}</span>
+                            {goal.reminder_time && <span>{goal.reminder_time.slice(0, 5)}</span>}
+                            <span>{goal.category === 'battle' ? (isKo ? '배틀' : 'Battle') : (isKo ? '개인' : 'Personal')}</span>
+                          </div>
+                          <p>{isKo ? `현재 상태: ${statusLabels[goal.status]}` : `Status: ${statusLabels[goal.status]}`}</p>
                         </div>
 
                         <details className="task-menu task-menu-floating">
@@ -838,6 +710,14 @@ export default function Home() {
                               disabled={pendingAction === `priority-${goal.id}`}
                             >
                               {isKo ? '우선순위 변경' : 'Change priority'}
+                            </button>
+                            <button
+                              className="task-menu-item"
+                              type="button"
+                              onClick={() => handleSetRoutineStatus(goal.id, 'pending', { toggleSame: false })}
+                              disabled={pendingAction === `routine-${goal.id}`}
+                            >
+                              {isKo ? '상태 초기화' : 'Reset status'}
                             </button>
                             <button
                               className="task-menu-item task-menu-item-danger"
@@ -869,41 +749,133 @@ export default function Home() {
                         ))}
                       </div>
 
-                      <label className="routine-note-field" htmlFor={`routine-note-${goal.id}`}>
-                        <span>{isKo ? '메모' : 'Note'}</span>
-                        <input
-                          id={`routine-note-${goal.id}`}
-                          type="text"
-                          placeholder={isKo ? '짧은 메모를 남겨요' : 'Add a short note'}
-                          value={noteDrafts[goal.id] ?? goal.note}
-                          onChange={(event) =>
-                            setNoteDrafts((current) => ({
-                              ...current,
-                              [goal.id]: event.target.value,
-                            }))
-                          }
-                          onBlur={() => handleNoteBlur(goal)}
-                          disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
-                          maxLength={80}
-                        />
-                      </label>
-
-                      <div className="routine-card-footer">
-                        <span>{isKo ? `상태: ${statusLabels[goal.status]}` : `Status: ${statusLabels[goal.status]}`}</span>
+                      <div className="routine-note-toggle-row">
                         <button
-                          className="secondary-button home-task-button"
+                          className="routine-note-toggle"
                           type="button"
-                          onClick={() => handleSetRoutineStatus(goal.id, 'pending', { toggleSame: false })}
-                          disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                          onClick={() => toggleNote(goal.id)}
                         >
-                          {pendingAction === `routine-${goal.id}` ? t('home.saving') : t('home.undo')}
+                          {expandedNotes[goal.id]
+                            ? isKo
+                              ? '메모 접기'
+                              : 'Hide note'
+                            : goal.note
+                              ? isKo
+                                ? '메모 보기'
+                                : 'View note'
+                              : isKo
+                                ? '메모 추가'
+                                : 'Add note'}
                         </button>
                       </div>
+
+                      {expandedNotes[goal.id] && (
+                        <label className="routine-note-field" htmlFor={`routine-note-${goal.id}`}>
+                          <input
+                            id={`routine-note-${goal.id}`}
+                            type="text"
+                            placeholder={isKo ? '짧은 메모를 남겨요' : 'Add a short note'}
+                            value={noteDrafts[goal.id] ?? goal.note}
+                            onChange={(event) =>
+                              setNoteDrafts((current) => ({
+                                ...current,
+                                [goal.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => handleNoteBlur(goal)}
+                            disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                            maxLength={80}
+                          />
+                        </label>
+                      )}
                     </div>
                   </article>
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="home-week-mini-card">
+            <div>
+              <span>{isKo ? '이번 주' : 'This week'}</span>
+              <strong>{weekStats.percent}%</strong>
+            </div>
+            <div className="traffic-row" aria-label={isKo ? '이번 주 상태' : 'This week status'}>
+              {weekStats.daily.map((day) => (
+                <span
+                  key={day.dateKey}
+                  className={`traffic-cell traffic-cell-${day.status}`}
+                  title={`${day.dateKey} ${day.percent}%`}
+                />
+              ))}
+            </div>
+            <Link to="/stats">{isKo ? '자세히' : 'Details'}</Link>
+          </section>
+
+          <section className="home-battle-section">
+            <div className="section-header section-header-stack">
+              <div>
+                <h2>{isKo ? '배틀 상황' : 'Battle status'}</h2>
+                <p className="section-description">{isKo ? '친구 비교는 필요한 만큼만 보여줘요.' : 'A compact friend comparison.'}</p>
+              </div>
+            </div>
+
+            <article
+              className={
+                hasBattleStarted
+                  ? battleSummary.leader === 'me'
+                    ? 'battle-summary-bar battle-summary-bar-leading'
+                    : battleSummary.leader === 'friend'
+                      ? 'battle-summary-bar battle-summary-bar-trailing'
+                      : 'battle-summary-bar battle-summary-bar-tied'
+                  : 'battle-summary-bar'
+              }
+            >
+              {!friendProfile ? (
+                <div className="battle-summary-bar-empty">
+                  <div>
+                    <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
+                    <h3 className="battle-summary-bar-title">{t('home.battleBarNoFriendTitle')}</h3>
+                    <p className="battle-summary-bar-copy">{t('home.battleBarNoFriendBody')}</p>
+                  </div>
+
+                  <Link className="inline-action-link inline-action-link-light" to="/friends">
+                    {t('home.battleBarConnect')}
+                  </Link>
+                </div>
+              ) : !hasBattleStarted ? (
+                <div className="battle-summary-bar-empty">
+                  <div>
+                    <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
+                    <h3 className="battle-summary-bar-title">{battleSetupTitle}</h3>
+                    <p className="battle-summary-bar-copy">{battleSetupBody}</p>
+                  </div>
+
+                  <Link className="inline-action-link inline-action-link-light" to="/friends">
+                    {battleSetupAction}
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <div className="battle-summary-bar-top">
+                    <div>
+                      <p className="section-eyebrow">{t('home.battleBarEyebrow')}</p>
+                      <h3 className="battle-summary-bar-title">{battleHeadline}</h3>
+                      <p className="battle-summary-bar-copy">{battleScoreLine}</p>
+                    </div>
+
+                    <Link className="inline-action-link inline-action-link-light" to="/battle">
+                      {t('home.battleBarCta')}
+                    </Link>
+                  </div>
+
+                  <div className="battle-summary-bar-meta">
+                    <span className="battle-meta-pill">{battleDifferenceText}</span>
+                    <span className="battle-meta-pill">{battleWagerText}</span>
+                  </div>
+                </>
+              )}
+            </article>
           </section>
         </main>
 

@@ -7,7 +7,6 @@ export default function BottomTabBar() {
   const tabs = [
     { to: '/home', label: 'Today' },
     { to: '/battle', label: t('tabs.battle') },
-    { to: '/focus', label: 'Focus' },
     { to: '/stats', label: 'Stats' },
   ];
 

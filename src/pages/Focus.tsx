@@ -160,7 +160,12 @@ export default function Focus() {
 
           <section className="focus-board">
             {QUADRANTS.map((quadrant) => (
-              <article key={quadrant.key} className={`focus-column focus-column-${quadrant.key}`}>
+              <article
+                key={quadrant.key}
+                className={`focus-column focus-column-${quadrant.key}${
+                  routinesByQuadrant[quadrant.key].length === 0 ? ' focus-column-empty' : ''
+                }`}
+              >
                 <div className="focus-column-header">
                   <div>
                     <h2>{isKo ? quadrant.titleKo : quadrant.titleEn}</h2>

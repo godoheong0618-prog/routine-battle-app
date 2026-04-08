@@ -361,6 +361,37 @@ export default function Battle() {
     partial: isKo ? '조금 함' : 'Partial',
     rest: isKo ? '쉼' : 'Rest',
   };
+  const scoreboardTitle =
+    battleSummary.leader === 'me'
+      ? isKo
+        ? `${profileLabel} 리드`
+        : `${profileLabel} leads`
+      : battleSummary.leader === 'friend'
+        ? isKo
+          ? `${opponentLabel} 리드`
+          : `${opponentLabel} leads`
+        : battleSummary.leader === 'tied'
+          ? isKo
+            ? '동점 상황'
+            : 'Tied battle'
+          : t('battle.statusWaiting');
+  const canFlipWithOneMore = battleSummary.leader === 'friend' && Math.abs(battleSummary.difference) <= 2;
+  const scoreboardHint =
+    battleSummary.leader === 'friend'
+      ? canFlipWithOneMore
+        ? isKo
+          ? '오늘 1개만 더 하면 뒤집을 수 있어요.'
+          : 'One more today can flip it.'
+        : isKo
+          ? '오늘 1개씩 따라붙는 것부터 시작해요.'
+          : 'Start by closing the gap one routine at a time.'
+      : battleSummary.leader === 'me'
+        ? isKo
+          ? '오늘 1개 더 하면 리드를 지킬 수 있어요.'
+          : 'One more today helps protect the lead.'
+        : isKo
+          ? '오늘 1개 먼저 하면 앞설 수 있어요.'
+          : 'Finish one today to move ahead.';
   const weekDateKeys = useMemo(() => getWeekDateKeys(), []);
 
   const battleRoutineViews = useMemo<BattleRoutineView[]>(() => {
@@ -600,64 +631,33 @@ export default function Battle() {
             </article>
           ) : (
             <>
-              <section
-                className={
-                  battleSummary.leader === 'me'
-                    ? 'battle-hero-card battle-hero-card-leading'
-                    : battleSummary.leader === 'friend'
-                      ? 'battle-hero-card battle-hero-card-trailing'
-                      : 'battle-hero-card battle-hero-card-tied'
-                }
-              >
-                <div className="battle-hero-top">
+              <section className="battle-situation-card">
+                <div className="battle-situation-top">
                   <div>
-                    <p className="section-eyebrow battle-hero-eyebrow">{t('battle.heroEyebrow')}</p>
-                    <h2 className="battle-hero-title">{battleTitle}</h2>
-                    <p className="battle-hero-copy">{heroTitle}</p>
+                    <p className="section-eyebrow">{battleTitle}</p>
+                    <h2>{scoreboardTitle}</h2>
                   </div>
-                  <span className="battle-hero-status-pill">{heroStatus}</span>
+                  <span>{t('battle.heroDifference', { points: Math.abs(battleSummary.difference) })}</span>
                 </div>
 
-                <div className="battle-hero-scoreline">
-                  {t('battle.heroScoreLine', {
-                    me: profileLabel,
-                    myScore: battleSummary.myScore,
-                    friend: opponentLabel,
-                    friendScore: battleSummary.friendScore,
-                  })}
-                </div>
-
-                <div className="battle-hero-meta">
-                  <article className="battle-hero-meta-card">
-                    <span>{t('battle.heroDifference', { points: Math.abs(battleSummary.difference) })}</span>
-                    <strong>{heroStatus}</strong>
+                <div className="battle-situation-score">
+                  <article>
+                    <span>{profileLabel}</span>
+                    <strong>{battleSummary.myScore}</strong>
                   </article>
-                  <article className="battle-hero-meta-card">
-                    <span>{battleWager}</span>
-                    <strong>{battleMeta?.wager_text?.trim() ? battleMeta.wager_text.trim() : t('battle.heroNoWager')}</strong>
+                  <article>
+                    <span>{opponentLabel}</span>
+                    <strong>{battleSummary.friendScore}</strong>
                   </article>
                 </div>
+
+                <p>{scoreboardHint}</p>
+                <a className="primary-button battle-open-cta" href="#battle-routines">
+                  {isKo ? '배틀 열기' : 'Open battle'}
+                </a>
               </section>
 
-              <section className="battle-score-strip">
-                <article className="score-panel">
-                  <span>{isKo ? '내 달성률' : 'My achievement'}</span>
-                  <strong>{`${battleSummary.myWeeklyPercent}%`}</strong>
-                  <p>{`${battleSummary.myScore} ${scoreSuffix}`}</p>
-                </article>
-                <article className="score-panel">
-                  <span>{isKo ? '친구 달성률' : 'Friend achievement'}</span>
-                  <strong>{`${battleSummary.friendWeeklyPercent}%`}</strong>
-                  <p>{`${battleSummary.friendScore} ${scoreSuffix}`}</p>
-                </article>
-                <article className="score-summary-card">
-                  <span>{isKo ? '이번 주 리더' : 'Weekly leader'}</span>
-                  <strong>{achievementLeaderText}</strong>
-                  <p>{achievementLine}</p>
-                </article>
-              </section>
-
-              <section className="section-block">
+              <section className="section-block" id="battle-routines">
                 <div className="section-header section-header-stack">
                   <div>
                     <h2>{isKo ? '배틀 루틴' : 'Battle routines'}</h2>
@@ -680,15 +680,17 @@ export default function Battle() {
                           <h3>{routine.title}</h3>
                           {routine.description && <p>{routine.description}</p>}
                         </div>
-                        <div className="battle-routine-status-grid">
-                          <span>{profileLabel}</span>
-                          <strong>{statusLabels[routine.myStatus]}</strong>
-                          <small>{isKo ? `이번 주 ${routine.myWeeklySuccess}회` : `${routine.myWeeklySuccess} this week`}</small>
-                        </div>
-                        <div className="battle-routine-status-grid">
-                          <span>{opponentLabel}</span>
-                          <strong>{statusLabels[routine.friendStatus]}</strong>
-                          <small>{isKo ? `이번 주 ${routine.friendWeeklySuccess}회` : `${routine.friendWeeklySuccess} this week`}</small>
+                        <div className="battle-routine-status-pair">
+                          <div className="battle-routine-status-grid">
+                            <span>{profileLabel}</span>
+                            <strong>{statusLabels[routine.myStatus]}</strong>
+                            <small>{isKo ? `이번 주 ${routine.myWeeklySuccess}회` : `${routine.myWeeklySuccess} this week`}</small>
+                          </div>
+                          <div className="battle-routine-status-grid">
+                            <span>{opponentLabel}</span>
+                            <strong>{statusLabels[routine.friendStatus]}</strong>
+                            <small>{isKo ? `이번 주 ${routine.friendWeeklySuccess}회` : `${routine.friendWeeklySuccess} this week`}</small>
+                          </div>
                         </div>
                       </article>
                     ))}
