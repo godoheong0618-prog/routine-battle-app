@@ -334,3 +334,145 @@ with check (
       and b.created_by = auth.uid()
   )
 );
+
+create table if not exists public.shared_goals (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  friend_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  description text,
+  rule_text text,
+  stake_text text,
+  points integer not null default 3,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.shared_goals add column if not exists id uuid default gen_random_uuid();
+alter table public.shared_goals add column if not exists owner_id uuid;
+alter table public.shared_goals add column if not exists friend_id uuid;
+alter table public.shared_goals add column if not exists title text;
+alter table public.shared_goals add column if not exists description text;
+alter table public.shared_goals add column if not exists rule_text text;
+alter table public.shared_goals add column if not exists stake_text text;
+alter table public.shared_goals add column if not exists points integer not null default 3;
+alter table public.shared_goals add column if not exists created_at timestamptz not null default now();
+alter table public.shared_goals add column if not exists updated_at timestamptz not null default now();
+
+update public.shared_goals
+set
+  id = coalesce(id, gen_random_uuid()),
+  title = coalesce(nullif(btrim(title), ''), 'Shared goal'),
+  rule_text = coalesce(rule_text, description),
+  points = case when points is null or points < 1 then 3 else points end
+where id is null
+   or title is null
+   or btrim(title) = ''
+   or rule_text is null
+   or points is null
+   or points < 1;
+
+create index if not exists shared_goals_owner_id_idx
+  on public.shared_goals (owner_id);
+
+create index if not exists shared_goals_friend_id_idx
+  on public.shared_goals (friend_id);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'shared_goals_owner_id_fkey'
+  ) then
+    alter table public.shared_goals
+      add constraint shared_goals_owner_id_fkey
+      foreign key (owner_id) references auth.users(id) on delete cascade;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'shared_goals_friend_id_fkey'
+  ) then
+    alter table public.shared_goals
+      add constraint shared_goals_friend_id_fkey
+      foreign key (friend_id) references auth.users(id) on delete cascade;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'shared_goals_points_check'
+  ) then
+    alter table public.shared_goals
+      add constraint shared_goals_points_check
+      check (points >= 1);
+  end if;
+end
+$$;
+
+drop trigger if exists set_shared_goals_updated_at on public.shared_goals;
+create trigger set_shared_goals_updated_at
+before update on public.shared_goals
+for each row execute function public.touch_updated_at();
+
+create or replace function public.are_friends(first_user_id uuid, second_user_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.friendships f
+    where (f.user_id = first_user_id and f.friend_id = second_user_id)
+       or (f.friend_id = first_user_id and f.user_id = second_user_id)
+  );
+$$;
+
+alter table public.shared_goals enable row level security;
+
+drop policy if exists shared_goals_select_participants on public.shared_goals;
+create policy shared_goals_select_participants
+on public.shared_goals
+for select
+to authenticated
+using (
+  owner_id = auth.uid()
+  or friend_id = auth.uid()
+);
+
+drop policy if exists shared_goals_insert_owner on public.shared_goals;
+drop policy if exists shared_goals_insert_participant on public.shared_goals;
+create policy shared_goals_insert_participant
+on public.shared_goals
+for insert
+to authenticated
+with check (
+  owner_id = auth.uid()
+  and friend_id <> auth.uid()
+  and public.are_friends(auth.uid(), friend_id)
+);
+
+drop policy if exists shared_goals_update_owner on public.shared_goals;
+create policy shared_goals_update_owner
+on public.shared_goals
+for update
+to authenticated
+using (
+  owner_id = auth.uid()
+  and public.are_friends(auth.uid(), friend_id)
+)
+with check (
+  owner_id = auth.uid()
+  and public.are_friends(auth.uid(), friend_id)
+);
+
+drop policy if exists shared_goals_delete_owner on public.shared_goals;
+create policy shared_goals_delete_owner
+on public.shared_goals
+for delete
+to authenticated
+using (owner_id = auth.uid());

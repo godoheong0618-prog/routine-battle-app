@@ -18,6 +18,8 @@ import {
   SharedGoalCheckinRow,
   SharedGoalRow,
   calculateBattleScores,
+  connectFriendByCode,
+  disconnectFriendConnection,
   ensureProfile,
   fetchFriendConnection,
   fetchRoutineLogsForUsers,
@@ -27,6 +29,7 @@ import {
   getTodayKey,
   getWeekDateKeys,
   isPositiveRoutineStatus,
+  normalizeFriendCode,
   normalizeRoutineCategory,
   normalizeRoutineStatus,
   RoutineStatus,
@@ -46,6 +49,11 @@ type BattleRoutineView = {
   friendStatus: RoutineStatus;
   myWeeklySuccess: number;
   friendWeeklySuccess: number;
+};
+
+type ToastState = {
+  id: number;
+  message: string;
 };
 
 function buildHeroTitle({
@@ -132,15 +140,35 @@ export default function Battle() {
   const [sharedGoalCheckins, setSharedGoalCheckins] = useState<SharedGoalCheckinRow[]>([]);
   const [nudges, setNudges] = useState<NudgeRow[]>([]);
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [ruleText, setRuleText] = useState('');
+  const [stakeText, setStakeText] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState('');
+  const [sharedGoalSheetOpen, setSharedGoalSheetOpen] = useState(false);
+  const [friendSheetOpen, setFriendSheetOpen] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const navigate = useNavigate();
   const { locale, t } = useLanguage();
   const isKo = locale === 'ko';
   const todayKey = useMemo(() => getTodayKey(), []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 2800);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     let active = true;
@@ -467,35 +495,132 @@ export default function Battle() {
     }
 
     const nextTitle = title.trim();
-    const nextDescription = description.trim();
+    const nextRuleText = ruleText.trim();
+    const nextStakeText = stakeText.trim();
 
     if (!nextTitle) {
       setError(t('battle.goalSaveError'));
       return;
     }
 
+    setPendingAction('shared-create');
+
+    const sharedGoalPayload = {
+      owner_id: userId,
+      friend_id: friendProfile.id,
+      title: nextTitle,
+      description: nextRuleText || null,
+      rule_text: nextRuleText || null,
+      stake_text: nextStakeText || null,
+      points: 3,
+    };
     const { data, error: insertError } = await supabase
       .from('shared_goals')
-      .insert({
-        owner_id: userId,
-        friend_id: friendProfile.id,
-        title: nextTitle,
-        description: nextDescription || null,
-        points: 3,
-      })
+      .insert(sharedGoalPayload)
       .select('*')
       .single();
 
     if (insertError) {
-      setError(t('battle.goalSaveError'));
       console.warn('Shared goal create failed:', insertError);
+      const message =
+        insertError.code === '42501' || (insertError as { status?: number }).status === 403
+          ? isKo
+            ? '공동 목표 저장 권한이 없어요. SQL policy를 먼저 적용해 주세요.'
+            : 'No permission to save this shared goal. Apply the SQL policy first.'
+          : insertError.code === '42703'
+            ? isKo
+              ? '공동 목표 SQL 컬럼을 먼저 적용해 주세요.'
+              : 'Apply the shared goal SQL columns first.'
+            : t('battle.goalSaveError');
+
+      setError(message);
+      setNotice(message);
+      setToast({ id: Date.now(), message });
+      setPendingAction('');
       return;
     }
 
     setSharedGoals((current) => [data as SharedGoalRow, ...current]);
     setTitle('');
-    setDescription('');
+    setRuleText('');
+    setStakeText('');
+    setSharedGoalSheetOpen(false);
     setNotice(t('battle.createGoalSuccess'));
+    setToast({ id: Date.now(), message: t('battle.createGoalSuccess') });
+    setPendingAction('');
+  };
+
+  const handleConnectFriend = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setNotice('');
+
+    if (!profile) {
+      setError(t('battle.loadError'));
+      return;
+    }
+
+    setPendingAction('friend-connect');
+
+    try {
+      const connection = await connectFriendByCode(profile, inviteCode);
+      const nextConnection = await fetchFriendConnection(connection.profile);
+      setProfile(nextConnection.profile);
+      setFriendProfile(nextConnection.friendProfile);
+      setBattleMeta(nextConnection.friendship);
+      setInviteCode('');
+      setFriendSheetOpen(false);
+      setToast({
+        id: Date.now(),
+        message: isKo ? '친구가 연결됐어요.' : 'Friend connected.',
+      });
+    } catch (connectError) {
+      const message = connectError instanceof Error ? connectError.message : t('battle.loadError');
+      setError(message);
+      setToast({ id: Date.now(), message });
+    } finally {
+      setPendingAction('');
+    }
+  };
+
+  const handleDisconnectFriend = async () => {
+    if (!profile) {
+      setError(t('battle.loadError'));
+      return;
+    }
+
+    setPendingAction('friend-disconnect');
+    setError('');
+    setNotice('');
+
+    try {
+      const result = await disconnectFriendConnection(profile, battleMeta?.id ?? null);
+      setProfile(result.profile);
+      setFriendProfile(null);
+      setBattleMeta(null);
+      setRoutines([]);
+      setRoutineLogs([]);
+      setSharedGoals([]);
+      setSharedGoalCheckins([]);
+      setNudges([]);
+      setDisconnectOpen(false);
+      setFriendSheetOpen(false);
+      setToast({
+        id: Date.now(),
+        message: isKo ? '친구 연결이 해제됐어요.' : 'Friend connection removed.',
+      });
+    } catch (disconnectError) {
+      const message =
+        disconnectError instanceof Error
+          ? disconnectError.message
+          : isKo
+            ? '친구 연결을 해제하지 못했어요.'
+            : 'Could not remove this friend connection.';
+      setError(message);
+      setToast({ id: Date.now(), message });
+    } finally {
+      setPendingAction('');
+    }
   };
 
   const handleToggleSharedGoal = async (goalId: string) => {
@@ -596,9 +721,17 @@ export default function Battle() {
     <div className="mobile-shell">
       <div className="app-screen subpage-screen">
         <header className="subpage-header battle-page-header">
-          <p className="section-eyebrow">{t('battle.eyebrow')}</p>
-          <h1>{t('battle.title')}</h1>
-          <p>{t('battle.description')}</p>
+          <div className="battle-page-header-row">
+            <div>
+              <p className="section-eyebrow">{t('battle.eyebrow')}</p>
+              <h1>{t('battle.title')}</h1>
+              <p>{t('battle.description')}</p>
+            </div>
+
+            <button className="battle-header-action" type="button" onClick={() => setFriendSheetOpen(true)}>
+              {isKo ? '친구 관리' : 'Friends'}
+            </button>
+          </div>
         </header>
 
         <main className="subpage-content">
@@ -690,6 +823,9 @@ export default function Battle() {
                     <h2>{t('battle.sharedTitle')}</h2>
                     <p className="section-description">{t('battle.sharedDescription')}</p>
                   </div>
+                  <button className="text-button" type="button" onClick={() => setSharedGoalSheetOpen(true)}>
+                    {isKo ? '공동 목표 추가' : 'Add shared goal'}
+                  </button>
                 </div>
 
                 {sharedGoalViews.length === 0 ? (
@@ -704,10 +840,12 @@ export default function Battle() {
                         <div className="shared-header">
                           <div>
                             <h3>{goal.title}</h3>
-                            <p>{goal.description || t('battle.sharedDescription')}</p>
+                            <p>{goal.rule_text || goal.description || t('battle.sharedDescription')}</p>
                           </div>
                           <span className="proof-pill">{t('battle.goalPoints', { points: goal.points ?? 3 })}</span>
                         </div>
+
+                        {goal.stake_text && <p className="shared-stake-note">{isKo ? `내기: ${goal.stake_text}` : `Stake: ${goal.stake_text}`}</p>}
 
                         <p className="battle-goal-status">{goal.statusText}</p>
 
@@ -747,34 +885,6 @@ export default function Battle() {
                     ))}
                   </div>
                 )}
-              </section>
-
-              <section className="section-block">
-                <div className="section-header section-header-stack">
-                  <div>
-                    <h2>{t('battle.createGoalTitle')}</h2>
-                    <p className="section-description">{t('battle.createGoalDescription')}</p>
-                  </div>
-                </div>
-
-                <form className="invite-card battle-goal-form" onSubmit={handleCreateSharedGoal}>
-                  <input
-                    type="text"
-                    placeholder={t('battle.goalTitlePlaceholder')}
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    required
-                  />
-                  <textarea
-                    rows={3}
-                    placeholder={t('battle.goalDescriptionPlaceholder')}
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                  />
-                  <button className="primary-button" type="submit">
-                    {t('battle.createGoalAction')}
-                  </button>
-                </form>
               </section>
 
               <section className="section-block">
@@ -844,6 +954,167 @@ export default function Battle() {
             </>
           )}
         </main>
+
+        {toast && (
+          <div className="home-toast" role="status" aria-live="polite">
+            {toast.message}
+          </div>
+        )}
+
+        {sharedGoalSheetOpen && (
+          <div className="modal-backdrop" role="presentation" onClick={() => setSharedGoalSheetOpen(false)}>
+            <form
+              className="modal-card bottom-sheet-card shared-goal-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="shared-goal-sheet-title"
+              onSubmit={handleCreateSharedGoal}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="shared-goal-sheet-title" className="modal-title">
+                {isKo ? '공동 목표 추가' : 'Add shared goal'}
+              </h2>
+              <p className="modal-copy">
+                {isKo ? '목표, 규칙, 내기를 짧게 정해두면 배틀 카드가 훨씬 선명해져요.' : 'Keep the goal, rule, and stake short so the battle stays easy to read.'}
+              </p>
+
+              <label className="field-group" htmlFor="shared-goal-title">
+                <span>{isKo ? '목표 제목' : 'Goal title'}</span>
+                <input
+                  id="shared-goal-title"
+                  type="text"
+                  placeholder={isKo ? '예: 운동 10분 같이 하기' : 'e.g. 10-minute workout'}
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  maxLength={60}
+                  required
+                />
+              </label>
+
+              <label className="field-group" htmlFor="shared-goal-rule">
+                <span>{isKo ? '규칙' : 'Rule'}</span>
+                <textarea
+                  id="shared-goal-rule"
+                  rows={3}
+                  placeholder={isKo ? '예: 매일 자기 전까지 인증하기' : 'e.g. Check in before bedtime'}
+                  value={ruleText}
+                  onChange={(event) => setRuleText(event.target.value)}
+                  maxLength={160}
+                />
+              </label>
+
+              <label className="field-group" htmlFor="shared-goal-stake">
+                <span>{isKo ? '내기/보상' : 'Stake or reward'}</span>
+                <input
+                  id="shared-goal-stake"
+                  type="text"
+                  placeholder={isKo ? '예: 진 사람이 커피 사기' : 'e.g. Loser buys coffee'}
+                  value={stakeText}
+                  onChange={(event) => setStakeText(event.target.value)}
+                  maxLength={80}
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button className="secondary-button" type="button" onClick={() => setSharedGoalSheetOpen(false)} disabled={pendingAction === 'shared-create'}>
+                  {isKo ? '취소' : 'Cancel'}
+                </button>
+                <button className="primary-button" type="submit" disabled={pendingAction === 'shared-create'}>
+                  {pendingAction === 'shared-create' ? t('home.saving') : isKo ? '생성' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {friendSheetOpen && (
+          <div className="modal-backdrop" role="presentation" onClick={() => setFriendSheetOpen(false)}>
+            <div
+              className="modal-card bottom-sheet-card friend-management-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="friend-management-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="friend-management-title" className="modal-title">
+                {isKo ? '친구 관리' : 'Manage friend'}
+              </h2>
+              <p className="modal-copy">
+                {isKo ? '친구를 연결하면 배틀 점수와 공동 목표를 함께 볼 수 있어요.' : 'Connect a friend to share battle scores and goals.'}
+              </p>
+
+              <div className="friend-sheet-code-card">
+                <span>{isKo ? '내 초대 코드' : 'My invite code'}</span>
+                <strong>{profile?.friend_code ?? '--------'}</strong>
+              </div>
+
+              {friendProfile ? (
+                <div className="friend-sheet-current-card">
+                  <div>
+                    <span>{isKo ? '현재 친구' : 'Current friend'}</span>
+                    <strong>{opponentLabel}</strong>
+                  </div>
+                  <button className="danger-button" type="button" onClick={() => setDisconnectOpen(true)} disabled={pendingAction === 'friend-disconnect'}>
+                    {isKo ? '친구 끊기' : 'Remove friend'}
+                  </button>
+                </div>
+              ) : (
+                <form className="friend-sheet-connect-form" onSubmit={handleConnectFriend}>
+                  <label className="field-group" htmlFor="battle-friend-code">
+                    <span>{isKo ? '친구 코드 입력' : 'Friend code'}</span>
+                    <input
+                      id="battle-friend-code"
+                      type="text"
+                      placeholder={isKo ? '초대 코드 입력' : 'Enter invite code'}
+                      value={inviteCode}
+                      onChange={(event) => setInviteCode(normalizeFriendCode(event.target.value))}
+                      maxLength={12}
+                    />
+                  </label>
+                  <button className="primary-button" type="submit" disabled={pendingAction === 'friend-connect'}>
+                    {pendingAction === 'friend-connect' ? t('home.saving') : isKo ? '친구 추가' : 'Add friend'}
+                  </button>
+                </form>
+              )}
+
+              <div className="modal-actions">
+                <Link className="secondary-button modal-link-button" to="/friends" onClick={() => setFriendSheetOpen(false)}>
+                  {isKo ? '친구 화면 열기' : 'Open Friends'}
+                </Link>
+                <button className="primary-button" type="button" onClick={() => setFriendSheetOpen(false)}>
+                  {isKo ? '닫기' : 'Close'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {disconnectOpen && (
+          <div className="modal-backdrop" role="presentation" onClick={() => pendingAction !== 'friend-disconnect' && setDisconnectOpen(false)}>
+            <div
+              className="modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="disconnect-friend-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="disconnect-friend-title" className="modal-title">
+                {isKo ? '정말 친구 연결을 해제할까요?' : 'Remove this friend connection?'}
+              </h2>
+              <p className="modal-copy">
+                {isKo ? '배틀과 공동 목표 연결도 함께 정리될 수 있습니다.' : 'Battle and shared goal connections may also stop appearing.'}
+              </p>
+              <div className="modal-actions">
+                <button className="secondary-button" type="button" onClick={() => setDisconnectOpen(false)} disabled={pendingAction === 'friend-disconnect'}>
+                  {isKo ? '취소' : 'Cancel'}
+                </button>
+                <button className="danger-button" type="button" onClick={handleDisconnectFriend} disabled={pendingAction === 'friend-disconnect'}>
+                  {pendingAction === 'friend-disconnect' ? t('home.saving') : isKo ? '확인' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <BottomTabBar />
       </div>

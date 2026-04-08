@@ -52,6 +52,8 @@ export type SharedGoalRow = {
   friend_id: string;
   title: string;
   description: string | null;
+  rule_text?: string | null;
+  stake_text?: string | null;
   points: number | null;
 };
 
