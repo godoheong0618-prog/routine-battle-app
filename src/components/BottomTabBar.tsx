@@ -5,10 +5,10 @@ export default function BottomTabBar() {
   const { t } = useLanguage();
 
   const tabs = [
-    { to: '/home', label: t('tabs.home') },
+    { to: '/home', label: 'Today' },
     { to: '/battle', label: t('tabs.battle') },
-    { to: '/friends', label: t('tabs.friends') },
-    { to: '/mypage', label: t('tabs.my') },
+    { to: '/focus', label: 'Focus' },
+    { to: '/stats', label: 'Stats' },
   ];
 
   return (

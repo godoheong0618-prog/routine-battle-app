@@ -5,12 +5,14 @@ import Battle from './pages/Battle';
 import CreateRoutine from './pages/CreateRoutine';
 import DisplayName from './pages/DisplayName';
 import Entry from './pages/Entry';
+import Focus from './pages/Focus';
 import Friends from './pages/Friends';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import MyPage from './pages/MyPage';
 import Onboarding from './pages/Onboarding';
 import SignUp from './pages/SignUp';
+import Stats from './pages/Stats';
 
 export default function App() {
   return (
@@ -46,6 +48,22 @@ export default function App() {
         }
       />
       <Route path="/feed" element={<Navigate to="/battle" replace />} />
+      <Route
+        path="/focus"
+        element={
+          <ProtectedRoute>
+            <Focus />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stats"
+        element={
+          <ProtectedRoute>
+            <Stats />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/mypage"
         element={

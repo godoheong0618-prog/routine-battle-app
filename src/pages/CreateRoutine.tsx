@@ -4,11 +4,14 @@ import {
   EVERYDAY_KEYS,
   ROUTINE_TEMPLATES,
   RoutineDayKey,
+  RoutineCategory,
   RoutineRow,
   WEEKDAY_KEYS,
   WEEKDAY_OPTIONS,
+  WEEKEND_KEYS,
   formatDaysOfWeek,
   getRoutineRepeatDays,
+  normalizeRoutineCategory,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -28,6 +31,9 @@ export default function CreateRoutine() {
   const [createMode, setCreateMode] = useState<CreateMode>('custom');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [reminderTime, setReminderTime] = useState('');
+  const [important, setImportant] = useState(false);
+  const [urgent, setUrgent] = useState(false);
+  const [category, setCategory] = useState<RoutineCategory>('personal');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -75,6 +81,9 @@ export default function CreateRoutine() {
       setRepeatMode(routine.schedule_type === 'specific_days' ? 'specific_days' : 'daily');
       setSelectedDays(getRoutineRepeatDays(routine));
       setReminderTime(routine.reminder_time ?? '');
+      setImportant(Boolean(routine.important));
+      setUrgent(Boolean(routine.urgent));
+      setCategory(normalizeRoutineCategory(routine.category));
       setInitialLoading(false);
     };
 
@@ -165,6 +174,10 @@ export default function CreateRoutine() {
       repeat_days: repeatMode === 'specific_days' ? selectedDays : EVERYDAY_KEYS,
       reminder_time: reminderTime || null,
       is_template: false,
+      important,
+      urgent,
+      category,
+      created_by: user.id,
     };
 
     if (isEditMode) {
@@ -340,6 +353,9 @@ export default function CreateRoutine() {
                 <button type="button" onClick={() => applyRepeatPreset(WEEKDAY_KEYS)}>
                   평일
                 </button>
+                <button type="button" onClick={() => applyRepeatPreset(WEEKEND_KEYS)}>
+                  주말
+                </button>
                 <button type="button" onClick={() => applyRepeatPreset(['mon', 'wed', 'fri'])}>
                   월/수/금
                 </button>
@@ -365,6 +381,48 @@ export default function CreateRoutine() {
                 </div>
               </div>
             )}
+          </section>
+
+          <section className="scheduler-card">
+            <div className="field-group">
+              <span>우선순위</span>
+              <div className="sheet-toggle-grid">
+                <button
+                  className={important ? 'sheet-toggle-button sheet-toggle-button-active' : 'sheet-toggle-button'}
+                  type="button"
+                  onClick={() => setImportant((current) => !current)}
+                >
+                  중요
+                </button>
+                <button
+                  className={urgent ? 'sheet-toggle-button sheet-toggle-button-active' : 'sheet-toggle-button'}
+                  type="button"
+                  onClick={() => setUrgent((current) => !current)}
+                >
+                  긴급
+                </button>
+              </div>
+            </div>
+
+            <div className="field-group">
+              <span>루틴 유형</span>
+              <div className="repeat-toggle">
+                <button
+                  className={category === 'personal' ? 'repeat-option repeat-option-active' : 'repeat-option'}
+                  type="button"
+                  onClick={() => setCategory('personal')}
+                >
+                  개인 루틴
+                </button>
+                <button
+                  className={category === 'battle' ? 'repeat-option repeat-option-active' : 'repeat-option'}
+                  type="button"
+                  onClick={() => setCategory('battle')}
+                >
+                  배틀 루틴
+                </button>
+              </div>
+            </div>
           </section>
 
           <div className="preview-card">

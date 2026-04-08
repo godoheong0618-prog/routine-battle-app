@@ -3,6 +3,10 @@ create extension if not exists pgcrypto;
 alter table public.routines add column if not exists repeat_days text[] not null default '{}';
 alter table public.routines add column if not exists reminder_time text;
 alter table public.routines add column if not exists is_template boolean not null default false;
+alter table public.routines add column if not exists important boolean not null default false;
+alter table public.routines add column if not exists urgent boolean not null default false;
+alter table public.routines add column if not exists category text not null default 'personal';
+alter table public.routines add column if not exists created_by uuid references auth.users(id) on delete set null;
 
 update public.routines
 set repeat_days = case
@@ -12,6 +16,35 @@ set repeat_days = case
 end
 where repeat_days is null
    or cardinality(repeat_days) = 0;
+
+update public.routines
+set
+  important = coalesce(important, false),
+  urgent = coalesce(urgent, false),
+  category = case when category in ('personal', 'battle') then category else 'personal' end,
+  created_by = coalesce(created_by, user_id)
+where important is null
+   or urgent is null
+   or category is null
+   or category not in ('personal', 'battle')
+   or created_by is null;
+
+create table if not exists public.battles (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  start_date date not null default current_date,
+  end_date date,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.battle_members (
+  id uuid primary key default gen_random_uuid(),
+  battle_id uuid not null references public.battles(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists public.routine_logs (
   id uuid primary key default gen_random_uuid(),
@@ -122,6 +155,15 @@ create index if not exists routine_logs_routine_id_idx
 create index if not exists routines_user_template_idx
   on public.routines (user_id, is_template);
 
+create index if not exists routines_user_category_idx
+  on public.routines (user_id, category);
+
+create unique index if not exists battle_members_battle_user_key
+  on public.battle_members (battle_id, user_id);
+
+create index if not exists battle_members_user_id_idx
+  on public.battle_members (user_id);
+
 do $$
 begin
   if not exists (
@@ -132,6 +174,16 @@ begin
     alter table public.routine_logs
       add constraint routine_logs_status_check
       check (status in ('pending', 'done', 'partial', 'rest'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'routines_category_check'
+  ) then
+    alter table public.routines
+      add constraint routines_category_check
+      check (category in ('personal', 'battle'));
   end if;
 
   if not exists (
@@ -171,7 +223,14 @@ create trigger set_routine_logs_updated_at
 before update on public.routine_logs
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists set_battles_updated_at on public.battles;
+create trigger set_battles_updated_at
+before update on public.battles
+for each row execute function public.touch_updated_at();
+
 alter table public.routine_logs enable row level security;
+alter table public.battles enable row level security;
+alter table public.battle_members enable row level security;
 
 drop policy if exists routine_logs_select_owner_or_friend on public.routine_logs;
 create policy routine_logs_select_owner_or_friend
@@ -225,3 +284,53 @@ on public.routine_logs
 for delete
 to authenticated
 using (user_id = auth.uid());
+
+drop policy if exists battles_select_member on public.battles;
+create policy battles_select_member
+on public.battles
+for select
+to authenticated
+using (
+  created_by = auth.uid()
+  or exists (
+    select 1 from public.battle_members bm
+    where bm.battle_id = id
+      and bm.user_id = auth.uid()
+  )
+);
+
+drop policy if exists battles_insert_creator on public.battles;
+create policy battles_insert_creator
+on public.battles
+for insert
+to authenticated
+with check (created_by = auth.uid());
+
+drop policy if exists battles_update_creator on public.battles;
+create policy battles_update_creator
+on public.battles
+for update
+to authenticated
+using (created_by = auth.uid())
+with check (created_by = auth.uid());
+
+drop policy if exists battle_members_select_member on public.battle_members;
+create policy battle_members_select_member
+on public.battle_members
+for select
+to authenticated
+using (user_id = auth.uid());
+
+drop policy if exists battle_members_insert_self_or_creator on public.battle_members;
+create policy battle_members_insert_self_or_creator
+on public.battle_members
+for insert
+to authenticated
+with check (
+  user_id = auth.uid()
+  or exists (
+    select 1 from public.battles b
+    where b.id = battle_id
+      and b.created_by = auth.uid()
+  )
+);

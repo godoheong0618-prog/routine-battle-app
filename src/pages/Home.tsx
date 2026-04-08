@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
+import RoutineEditorSheet from '../components/RoutineEditorSheet';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
   formatOpponentLabel,
@@ -29,6 +30,7 @@ import {
   getTodayDayKey,
   getTodayKey,
   getWeekDateKeys,
+  getWeekEndKey,
   isRoutineVisibleToday,
   normalizeRoutineStatus,
 } from '../lib/mvp';
@@ -95,6 +97,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [routineSheetOpen, setRoutineSheetOpen] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState<RoutineRow | null>(null);
   const navigate = useNavigate();
   const { locale, t } = useLanguage();
   const isKo = locale === 'ko';
@@ -384,10 +388,28 @@ export default function Home() {
     ? `${friendLabel}와 연결되었어요. 친구 탭에서 배틀 이름과 내기를 정하면 홈 상단에 바로 반영돼요.`
     : `You are connected with ${friendLabel}. Add a battle name and wager in Friends to show the summary here.`;
   const battleSetupAction = isKo ? '배틀 설정하기' : 'Set up battle';
-  const battleChipText = !friendProfile ? t('home.battleWaiting') : hasBattleStarted ? battleDifferenceText : isKo ? '설정 필요' : 'Setup needed';
   const scoreSuffix = isKo ? '점' : 'pts';
+  const weekEndDate = useMemo(() => new Date(`${getWeekEndKey()}T12:00:00`), []);
+  const battleDaysLeft = Math.max(
+    Math.ceil((weekEndDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)),
+    0
+  );
   const weekPercentLabel = isKo ? '이번 주 달성률' : 'Weekly achievement';
   const weekSummaryTitle = isKo ? `${weekStats.percent}% 달성 중` : `${weekStats.percent}% this week`;
+  const todayHeroTitle = isKo
+    ? `오늘 ${completedCount}/${personalGoals.length} 완료`
+    : `Today ${completedCount}/${personalGoals.length} done`;
+  const todayHeroCopy = !friendProfile
+    ? isKo
+      ? '친구를 연결하면 배틀 상태가 여기서 바로 보여요.'
+      : 'Connect a friend to see battle status here.'
+    : hasBattleStarted
+      ? isKo
+        ? `이번 주 배틀 종료까지 ${battleDaysLeft}일 남았어요.`
+        : `${battleDaysLeft} days left in this week battle.`
+      : isKo
+        ? `${friendLabel}와 연결됨 · 배틀 설정 전`
+        : `Connected with ${friendLabel} · setup needed`;
   const weekSummarySubtitle =
     personalGoals.length === 0
       ? t('home.summaryEmpty')
@@ -408,6 +430,60 @@ export default function Home() {
 
   const showToast = (message: string) => {
     setToast({ id: Date.now(), message });
+  };
+
+  const openCreateSheet = () => {
+    setEditingRoutine(null);
+    setRoutineSheetOpen(true);
+  };
+
+  const openEditSheet = (routine: RoutineRow) => {
+    setEditingRoutine(routine);
+    setRoutineSheetOpen(true);
+  };
+
+  const handleRoutineSaved = (routine: RoutineRow) => {
+    setRoutines((current) => {
+      const exists = current.some((item) => item.id === routine.id);
+      return exists ? current.map((item) => (item.id === routine.id ? routine : item)) : [routine, ...current];
+    });
+    showToast(isKo ? '루틴을 저장했어요.' : 'Routine saved.');
+  };
+
+  const handleCyclePriority = async (routine: RoutineRow) => {
+    if (!userId) {
+      navigate('/login');
+      return;
+    }
+
+    const nextPriority =
+      routine.important && routine.urgent
+        ? { important: true, urgent: false }
+        : routine.important
+          ? { important: false, urgent: true }
+          : routine.urgent
+            ? { important: false, urgent: false }
+            : { important: true, urgent: true };
+
+    setPendingAction(`priority-${routine.id}`);
+
+    const { data, error } = await supabase
+      .from('routines')
+      .update(nextPriority)
+      .eq('id', routine.id)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.warn('Routine priority save failed:', error);
+      showToast(isKo ? '우선순위를 저장하지 못했어요.' : 'Could not save priority.');
+      setPendingAction('');
+      return;
+    }
+
+    setRoutines((current) => current.map((item) => (item.id === routine.id ? (data as RoutineRow) : item)));
+    setPendingAction('');
   };
 
   const handleSetRoutineStatus = async (
@@ -559,6 +635,28 @@ export default function Home() {
             </Link>
           </div>
 
+          <section className="today-hero-card">
+            <div>
+              <p className="section-eyebrow">{isKo ? 'Today' : 'Today'}</p>
+              <h1>{todayHeroTitle}</h1>
+              <p>{todayHeroCopy}</p>
+            </div>
+            <div className="today-hero-metrics">
+              <article>
+                <span>{isKo ? '해야 할 루틴' : 'Due'}</span>
+                <strong>{personalGoals.length}</strong>
+              </article>
+              <article>
+                <span>{isKo ? '완료' : 'Done'}</span>
+                <strong>{completedCount}</strong>
+              </article>
+              <article>
+                <span>{isKo ? '주간률' : 'Week'}</span>
+                <strong>{weekStats.percent}%</strong>
+              </article>
+            </div>
+          </section>
+
           <article
             className={
               hasBattleStarted
@@ -681,16 +779,18 @@ export default function Home() {
                       : t('home.tasksDescriptionRemaining', { count: remainingCount })}
                 </p>
               </div>
-              <Link to="/create-routine">{t('home.add')}</Link>
+              <button className="text-button" type="button" onClick={openCreateSheet}>
+                {t('home.add')}
+              </button>
             </div>
 
             {personalGoals.length === 0 ? (
               <article className="empty-state-card">
                 <h3>{t('home.tasksEmptyTitle')}</h3>
                 <p>{t('home.tasksEmptyBody')}</p>
-                <Link className="inline-action-link" to="/create-routine">
+                <button className="inline-action-link" type="button" onClick={openCreateSheet}>
                   {t('home.addRoutine')}
-                </Link>
+                </button>
               </article>
             ) : (
               <div className="today-task-list">
@@ -728,9 +828,17 @@ export default function Home() {
                           </summary>
 
                           <div className="task-menu-popover">
-                            <Link className="task-menu-item" to={`/create-routine?id=${goal.id}`}>
+                            <button className="task-menu-item" type="button" onClick={() => openEditSheet(goal)}>
                               {t('home.edit')}
-                            </Link>
+                            </button>
+                            <button
+                              className="task-menu-item"
+                              type="button"
+                              onClick={() => handleCyclePriority(goal)}
+                              disabled={pendingAction === `priority-${goal.id}`}
+                            >
+                              {isKo ? '우선순위 변경' : 'Change priority'}
+                            </button>
                             <button
                               className="task-menu-item task-menu-item-danger"
                               type="button"
@@ -799,14 +907,22 @@ export default function Home() {
           </section>
         </main>
 
-        <Link className="fab-button fab-button-extended" to="/create-routine" aria-label={t('home.addRoutine')}>
+        <button className="fab-button fab-button-extended" type="button" onClick={openCreateSheet} aria-label={t('home.addRoutine')}>
           + {t('home.addRoutine')}
-        </Link>
+        </button>
 
         {toast && (
           <div className="home-toast" role="status" aria-live="polite">
             {toast.message}
           </div>
+        )}
+
+        {routineSheetOpen && (
+          <RoutineEditorSheet
+            initialRoutine={editingRoutine}
+            onClose={() => setRoutineSheetOpen(false)}
+            onSaved={handleRoutineSaved}
+          />
         )}
 
         <BottomTabBar />

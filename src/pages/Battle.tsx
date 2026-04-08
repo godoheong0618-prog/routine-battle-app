@@ -22,6 +22,11 @@ import {
   fetchRoutineLogsForUsers,
   filterSharedGoalsForPair,
   getTodayKey,
+  getWeekDateKeys,
+  isPositiveRoutineStatus,
+  normalizeRoutineCategory,
+  normalizeRoutineStatus,
+  RoutineStatus,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -29,6 +34,15 @@ type SharedGoalView = SharedGoalRow & {
   myDoneToday: boolean;
   friendDoneToday: boolean;
   statusText: string;
+};
+
+type BattleRoutineView = {
+  title: string;
+  description: string;
+  myStatus: RoutineStatus;
+  friendStatus: RoutineStatus;
+  myWeeklySuccess: number;
+  friendWeeklySuccess: number;
 };
 
 function buildHeroTitle({
@@ -341,6 +355,83 @@ export default function Battle() {
             : 'Weekly rate is tied'
           : t('battle.statusWaiting');
   const achievementLine = `${profileLabel} ${battleSummary.myWeeklyPercent}% · ${opponentLabel} ${battleSummary.friendWeeklyPercent}%`;
+  const statusLabels: Record<RoutineStatus, string> = {
+    pending: isKo ? '대기' : 'Pending',
+    done: isKo ? '완료' : 'Done',
+    partial: isKo ? '조금 함' : 'Partial',
+    rest: isKo ? '쉼' : 'Rest',
+  };
+  const weekDateKeys = useMemo(() => getWeekDateKeys(), []);
+
+  const battleRoutineViews = useMemo<BattleRoutineView[]>(() => {
+    if (!friendProfile) {
+      return [];
+    }
+
+    const battleRoutines = routines.filter((routine) => normalizeRoutineCategory(routine.category) === 'battle');
+    const grouped = new Map<string, { title: string; description: string; myRoutine?: RoutineRow; friendRoutine?: RoutineRow }>();
+
+    battleRoutines.forEach((routine) => {
+      const key = routine.title.trim().toLowerCase();
+      const group = grouped.get(key) ?? {
+        title: routine.title,
+        description: routine.description ?? '',
+      };
+
+      if (routine.user_id === userId) {
+        group.myRoutine = routine;
+      }
+
+      if (routine.user_id === friendProfile.id) {
+        group.friendRoutine = routine;
+      }
+
+      grouped.set(key, group);
+    });
+
+    return Array.from(grouped.values()).map((group) => {
+      const myTodayLog = group.myRoutine
+        ? routineLogs.find(
+            (log) => log.routine_id === group.myRoutine?.id && log.user_id === userId && log.log_date === todayKey
+          )
+        : null;
+      const friendTodayLog = group.friendRoutine
+        ? routineLogs.find(
+            (log) =>
+              log.routine_id === group.friendRoutine?.id &&
+              log.user_id === friendProfile.id &&
+              log.log_date === todayKey
+          )
+        : null;
+      const myWeeklySuccess = group.myRoutine
+        ? routineLogs.filter(
+            (log) =>
+              log.routine_id === group.myRoutine?.id &&
+              log.user_id === userId &&
+              weekDateKeys.includes(log.log_date) &&
+              isPositiveRoutineStatus(log.status)
+          ).length
+        : 0;
+      const friendWeeklySuccess = group.friendRoutine
+        ? routineLogs.filter(
+            (log) =>
+              log.routine_id === group.friendRoutine?.id &&
+              log.user_id === friendProfile.id &&
+              weekDateKeys.includes(log.log_date) &&
+              isPositiveRoutineStatus(log.status)
+          ).length
+        : 0;
+
+      return {
+        title: group.title,
+        description: group.description,
+        myStatus: myTodayLog ? normalizeRoutineStatus(myTodayLog.status) : 'pending',
+        friendStatus: friendTodayLog ? normalizeRoutineStatus(friendTodayLog.status) : 'pending',
+        myWeeklySuccess,
+        friendWeeklySuccess,
+      };
+    });
+  }, [friendProfile, routineLogs, routines, todayKey, userId, weekDateKeys]);
 
   const handleCreateSharedGoal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -564,6 +655,45 @@ export default function Battle() {
                   <strong>{achievementLeaderText}</strong>
                   <p>{achievementLine}</p>
                 </article>
+              </section>
+
+              <section className="section-block">
+                <div className="section-header section-header-stack">
+                  <div>
+                    <h2>{isKo ? '배틀 루틴' : 'Battle routines'}</h2>
+                    <p className="section-description">
+                      {isKo ? '오늘 상태와 이번 주 성공 수만 간단히 비교해요.' : 'Compare today status and weekly wins only.'}
+                    </p>
+                  </div>
+                </div>
+
+                {battleRoutineViews.length === 0 ? (
+                  <article className="empty-state-card">
+                    <h3>{isKo ? '아직 배틀 루틴이 없어요' : 'No battle routines yet'}</h3>
+                    <p>{isKo ? '루틴 추가에서 배틀 루틴으로 표시하면 여기에 모여요.' : 'Mark a routine as Battle and it will appear here.'}</p>
+                  </article>
+                ) : (
+                  <div className="battle-routine-list">
+                    {battleRoutineViews.map((routine) => (
+                      <article key={routine.title} className="battle-routine-card">
+                        <div>
+                          <h3>{routine.title}</h3>
+                          {routine.description && <p>{routine.description}</p>}
+                        </div>
+                        <div className="battle-routine-status-grid">
+                          <span>{profileLabel}</span>
+                          <strong>{statusLabels[routine.myStatus]}</strong>
+                          <small>{isKo ? `이번 주 ${routine.myWeeklySuccess}회` : `${routine.myWeeklySuccess} this week`}</small>
+                        </div>
+                        <div className="battle-routine-status-grid">
+                          <span>{opponentLabel}</span>
+                          <strong>{statusLabels[routine.friendStatus]}</strong>
+                          <small>{isKo ? `이번 주 ${routine.friendWeeklySuccess}회` : `${routine.friendWeeklySuccess} this week`}</small>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="section-block">

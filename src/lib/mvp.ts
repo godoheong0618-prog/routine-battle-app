@@ -12,6 +12,8 @@ export type RoutineDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun
 export type ScheduleType = 'daily' | 'specific_days';
 export type RoutineStatus = 'pending' | 'done' | 'partial' | 'rest';
 export type RoutineDayStatus = RoutineStatus | 'missed' | 'off';
+export type RoutineCategory = 'personal' | 'battle';
+export type PriorityQuadrant = 'do' | 'schedule' | 'delegate' | 'later';
 
 export type RoutineRow = {
   id: string;
@@ -25,6 +27,10 @@ export type RoutineRow = {
   repeat_days?: RoutineDayKey[] | null;
   reminder_time: string | null;
   is_template?: boolean | null;
+  important?: boolean | null;
+  urgent?: boolean | null;
+  category?: RoutineCategory | string | null;
+  created_by?: string | null;
 };
 
 export type RoutineLogRow = {
@@ -98,6 +104,7 @@ export const WEEKDAY_OPTIONS: Array<{ key: RoutineDayKey; label: string }> = [
 ];
 
 export const WEEKDAY_KEYS: RoutineDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri'];
+export const WEEKEND_KEYS: RoutineDayKey[] = ['sat', 'sun'];
 export const EVERYDAY_KEYS: RoutineDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 export const ROUTINE_STATUS_LABELS: Record<RoutineStatus, { ko: string; en: string }> = {
@@ -319,6 +326,42 @@ export function formatRoutineSchedule(routine: RoutineRow) {
   }
 
   return '매일';
+}
+
+export function normalizeRoutineCategory(category: string | null | undefined): RoutineCategory {
+  return category === 'battle' ? 'battle' : 'personal';
+}
+
+export function getRoutinePriorityQuadrant(routine: Pick<RoutineRow, 'important' | 'urgent'>): PriorityQuadrant {
+  if (routine.important && routine.urgent) {
+    return 'do';
+  }
+
+  if (routine.important && !routine.urgent) {
+    return 'schedule';
+  }
+
+  if (!routine.important && routine.urgent) {
+    return 'delegate';
+  }
+
+  return 'later';
+}
+
+export function formatRoutinePriority(routine: Pick<RoutineRow, 'important' | 'urgent'>) {
+  if (routine.important && routine.urgent) {
+    return '중요 · 긴급';
+  }
+
+  if (routine.important) {
+    return '중요';
+  }
+
+  if (routine.urgent) {
+    return '긴급';
+  }
+
+  return '낮은 우선순위';
 }
 
 export type RoutineDailyStat = {
