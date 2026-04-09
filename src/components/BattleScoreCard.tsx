@@ -63,6 +63,11 @@ function useCountUpValue(value: number) {
   return Math.round(displayValue);
 }
 
+function getInitial(label: string) {
+  const normalized = label.trim();
+  return normalized.slice(0, 1).toUpperCase() || '?';
+}
+
 export default function BattleScoreCard({
   eyebrow,
   title,
@@ -121,14 +126,17 @@ export default function BattleScoreCard({
   if (!hasFriend || !hasBattleStarted) {
     return (
       <section className={`battle-score-card battle-score-card-empty ${className}`}>
-        <div>
-          <p className="section-eyebrow">{eyebrow}</p>
-          <h2>{emptyTitle}</h2>
-          <p>{emptyBody}</p>
+        <div className="battle-score-card-top">
+          <div>
+            <p className="section-eyebrow">{eyebrow}</p>
+            <h2>{emptyTitle}</h2>
+          </div>
         </div>
 
+        <p className="battle-score-empty-copy">{emptyBody}</p>
+
         {setupHref && setupLabel && (
-          <Link className="battle-score-cta" to={setupHref}>
+          <Link className="battle-score-cta battle-score-cta-secondary" to={setupHref}>
             {setupLabel}
           </Link>
         )}
@@ -137,7 +145,9 @@ export default function BattleScoreCard({
   }
 
   return (
-    <section className={`battle-score-card battle-score-card-${leader} ${pulse ? 'battle-score-card-pulse' : ''} ${className}`}>
+    <section
+      className={`battle-score-card battle-score-card-${leader} ${pulse ? 'battle-score-card-pulse' : ''} ${className}`}
+    >
       <div className="battle-score-card-top">
         <div>
           <p className="section-eyebrow">{eyebrow}</p>
@@ -146,20 +156,28 @@ export default function BattleScoreCard({
         {daysLeft !== null && <span className="battle-days-pill">D-{daysLeft}</span>}
       </div>
 
-      <div className="battle-score-grid">
-        <article className={leader === 'me' ? 'battle-score-box battle-score-box-leading' : 'battle-score-box'}>
+      <div className="battle-score-versus">
+        <article className={leader === 'me' ? 'battle-score-player battle-score-player-leading' : 'battle-score-player'}>
+          <div className="battle-score-avatar">{getInitial(myLabel)}</div>
           <span>{myLabel}</span>
           <strong>{myDisplayScore}</strong>
         </article>
-        <article className={leader === 'friend' ? 'battle-score-box battle-score-box-leading' : 'battle-score-box'}>
+
+        <div className="battle-score-vs">VS</div>
+
+        <article
+          className={leader === 'friend' ? 'battle-score-player battle-score-player-leading' : 'battle-score-player'}
+        >
+          <div className="battle-score-avatar">{getInitial(friendLabel)}</div>
           <span>{friendLabel}</span>
           <strong>{friendDisplayScore}</strong>
         </article>
       </div>
 
-      <p className="battle-score-hint">{actionHint}</p>
-
-      {ctaElement}
+      <div className="battle-score-message">
+        <p className="battle-score-hint">{actionHint}</p>
+        {ctaElement}
+      </div>
     </section>
   );
 }

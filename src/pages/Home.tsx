@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import BattleScoreCard from '../components/BattleScoreCard';
 import BottomTabBar from '../components/BottomTabBar';
 import RoutineEditorSheet from '../components/RoutineEditorSheet';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -21,13 +20,12 @@ import {
   SharedGoalRow,
   calculateBattleScores,
   calculateRoutineStats,
+  calculateStreak,
   ensureProfile,
   fetchFriendConnection,
   fetchRoutineLogsForUsers,
   filterSharedGoalsForPair,
   formatRoutineSchedule,
-  getBattleActionHint,
-  getDaysUntilWeekEnd,
   getFullWeekDateKeys,
   getTodayDayKey,
   getTodayKey,
@@ -39,7 +37,6 @@ import { supabase } from '../supabaseClient';
 type PersonalGoalView = RoutineRow & {
   status: RoutineStatus;
   note: string;
-  meta: string;
 };
 
 type ToastState = {
@@ -85,6 +82,30 @@ function getBattleHeadline({
   });
 }
 
+function formatScreenDate(locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  }).format(new Date());
+}
+
+function formatRoutineTime(reminderTime: string | null, locale: string) {
+  if (!reminderTime) {
+    return '';
+  }
+
+  const [hourText = '0', minuteText = '0'] = reminderTime.split(':');
+  const date = new Date();
+  date.setHours(Number(hourText), Number(minuteText), 0, 0);
+
+  return new Intl.DateTimeFormat(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
+}
+
 export default function Home() {
   const [userId, setUserId] = useState('');
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -109,6 +130,7 @@ export default function Home() {
 
   const todayKey = useMemo(() => getTodayKey(), []);
   const todayDayKey = useMemo(() => getTodayDayKey(), []);
+  const screenLocale = isKo ? 'ko-KR' : 'en-US';
 
   useEffect(() => {
     if (!toast) {
@@ -140,7 +162,6 @@ export default function Home() {
 
       setUserId(user.id);
 
-      let currentProfile: ProfileRow | null = null;
       let currentFriend: ProfileRow | null = null;
       let loadNotice = '';
 
@@ -148,7 +169,6 @@ export default function Home() {
         const ensuredProfile = await ensureProfile(user);
         const connection = await fetchFriendConnection(ensuredProfile);
 
-        currentProfile = connection.profile;
         currentFriend = connection.friendProfile;
 
         if (!active) {
@@ -189,7 +209,9 @@ export default function Home() {
 
         if (active) {
           setRoutines(loadedRoutines.filter((routine) => routine.user_id === user.id));
-          setFriendRoutines(currentFriend ? loadedRoutines.filter((routine) => routine.user_id === currentFriend.id) : []);
+          setFriendRoutines(
+            currentFriend ? loadedRoutines.filter((routine) => routine.user_id === currentFriend.id) : []
+          );
         }
       } catch (loadError) {
         console.warn('Home routines load failed:', loadError);
@@ -300,6 +322,9 @@ export default function Home() {
     [routineLogs, userId]
   );
 
+  const streak = useMemo(() => calculateStreak(myRoutineLogs), [myRoutineLogs]);
+  const todayLabel = useMemo(() => formatScreenDate(screenLocale), [screenLocale]);
+
   const todayLogByRoutineId = useMemo(() => {
     return new Map(
       myRoutineLogs
@@ -311,17 +336,14 @@ export default function Home() {
   const personalGoals = useMemo<PersonalGoalView[]>(() => {
     return todayRoutines.map((routine) => {
       const log = todayLogByRoutineId.get(String(routine.id));
-      const scheduleText = formatRoutineSchedule(routine);
-      const targetText = t('home.goalMeta', { count: routine.target_count ?? 1 });
 
       return {
         ...routine,
         status: log ? normalizeRoutineStatus(log.status) : 'pending',
         note: log?.note ?? '',
-        meta: routine.description || `${scheduleText} · ${targetText}`,
       };
     });
-  }, [t, todayLogByRoutineId, todayRoutines]);
+  }, [todayLogByRoutineId, todayRoutines]);
 
   const battleSummary = useMemo(() => {
     return calculateBattleScores({
@@ -338,6 +360,7 @@ export default function Home() {
     () => calculateRoutineStats(routines, routineLogs, userId, getFullWeekDateKeys()),
     [routineLogs, routines, userId]
   );
+
   const completedCount = personalGoals.filter((goal) => goal.status === 'done').length;
   const remainingCount = personalGoals.filter((goal) => goal.status === 'pending').length;
   const hasBattleStarted = Boolean(friendProfile && battleMeta?.battle_started_at);
@@ -352,86 +375,42 @@ export default function Home() {
   });
 
   const battleDifferenceText = !friendProfile
-    ? t('home.battleWaiting')
+    ? isKo
+      ? '친구 연결 전'
+      : 'Connect friend first'
     : battleSummary.leader === 'tied'
-      ? t('home.battleTied')
-      : t('home.battleDifference', { points: Math.abs(battleSummary.difference) });
-
-  const battleScoreLine = friendProfile
-    ? `${t('home.battleBarScoreLine', {
-        me: profileLabel,
-        myScore: battleSummary.myScore,
-        friend: friendLabel,
-        friendScore: battleSummary.friendScore,
-      })} · ${profileLabel} ${battleSummary.myWeeklyPercent}% / ${friendLabel} ${battleSummary.friendWeeklyPercent}%`
-    : '';
-
-  const battleWagerText = battleMeta?.wager_text?.trim()
-    ? t('home.battleBarWager', { text: battleMeta.wager_text.trim() })
-    : t('home.battleBarNoWager');
-
-  const battleSetupTitle = isKo ? '배틀 설정을 저장하면 이번 주 요약이 바로 보여요' : 'Save battle setup to unlock the weekly summary';
-  const battleSetupBody = isKo
-    ? `${friendLabel}와 연결되었어요. 친구 탭에서 배틀 이름과 내기를 정하면 홈 상단에 바로 반영돼요.`
-    : `You are connected with ${friendLabel}. Add a battle name and wager in Friends to show the summary here.`;
-  const battleSetupAction = isKo ? '배틀 설정하기' : 'Set up battle';
-  const scoreSuffix = isKo ? '점' : 'pts';
-  const battleStateLabel = !friendProfile
-    ? isKo
-      ? '친구 없음'
-      : 'No friend'
-    : battleSummary.weeklyPercentLeader === 'me'
       ? isKo
-        ? '앞서는 중'
-        : 'Leading'
-      : battleSummary.weeklyPercentLeader === 'friend'
-        ? isKo
-          ? '뒤지는 중'
-          : 'Behind'
-        : isKo
-          ? '동점'
-          : 'Tied';
-  const battleDaysLeft = getDaysUntilWeekEnd();
-  const battleScoreTitle =
-    !friendProfile || !hasBattleStarted
-      ? isKo
-        ? '배틀 준비가 필요해요'
-        : 'Battle setup needed'
-      : battleSummary.leader === 'me'
-        ? isKo
-          ? `${profileLabel} 리드`
-          : `${profileLabel} leads`
-        : battleSummary.leader === 'friend'
-          ? isKo
-            ? `${friendLabel} 리드`
-            : `${friendLabel} leads`
-          : isKo
-            ? '동점 상황'
-            : 'Tied battle';
-  const battleActionHint = getBattleActionHint({
-    difference: battleSummary.difference,
-    hasFriend: Boolean(friendProfile),
-    locale,
-  });
-  const todayHeroTitle = isKo
-    ? `오늘 ${completedCount}/${personalGoals.length} 완료`
-    : `Today ${completedCount}/${personalGoals.length} done`;
-  const todayHeroCopy = !friendProfile
-    ? isKo
-      ? '친구를 연결하면 배틀 상태가 여기서 바로 보여요.'
-      : 'Connect a friend to see battle status here.'
-    : hasBattleStarted
-      ? isKo
-        ? `${profileLabel} ${battleSummary.myWeeklyPercent}% · ${friendLabel} ${battleSummary.friendWeeklyPercent}%`
-        : `${profileLabel} ${battleSummary.myWeeklyPercent}% · ${friendLabel} ${battleSummary.friendWeeklyPercent}%`
+        ? '지금은 동점이에요'
+        : 'You are tied right now'
       : isKo
-        ? `${friendLabel}와 연결됨 · 배틀 설정 전`
-        : `Connected with ${friendLabel} · setup needed`;
+        ? `${Math.abs(battleSummary.difference)}점 차이`
+        : `${Math.abs(battleSummary.difference)} pts apart`;
+
+  const battleTeaserHref = !friendProfile || !hasBattleStarted ? '/friends' : '/battle';
+  const battleTeaserTitle = !friendProfile
+    ? isKo
+      ? '친구를 연결하면 배틀이 열려요'
+      : 'Connect a friend to open the battle'
+    : !hasBattleStarted
+      ? isKo
+        ? '배틀 정보를 먼저 정리해 주세요'
+        : 'Add battle details first'
+      : battleHeadline || battleDifferenceText;
+  const battleTeaserBody = !friendProfile
+    ? isKo
+      ? '배틀 탭에서 서로의 진행률과 최근 활동을 비교할 수 있어요.'
+      : 'Compare progress and recent activity once a friend is connected.'
+    : !hasBattleStarted
+      ? isKo
+        ? `${friendLabel}님과 연결됨`
+        : `Connected with ${friendLabel}`
+      : `${profileLabel} ${battleSummary.myScore} : ${battleSummary.friendScore} ${friendLabel}`;
+
   const statusLabels: Record<RoutineStatus, string> = {
     pending: isKo ? '대기' : 'Pending',
     done: isKo ? '완료' : 'Done',
     partial: isKo ? '부분 완료' : 'Partial',
-    rest: isKo ? '쉬는 날' : 'Rest',
+    rest: isKo ? '쉼' : 'Rest',
   };
 
   const showToast = (message: string) => {
@@ -629,7 +608,7 @@ export default function Home() {
       return;
     }
 
-    const confirmed = window.confirm(t('home.deleteConfirm'));
+    const confirmed = window.confirm(isKo ? '이 루틴을 삭제할까요?' : 'Delete this routine?');
 
     if (!confirmed) {
       return;
@@ -655,7 +634,7 @@ export default function Home() {
 
     if (routineDeleteError) {
       console.warn('Routine delete failed:', routineDeleteError);
-      showToast(t('home.deleteError'));
+      showToast(isKo ? '루틴을 삭제하지 못했어요.' : 'Could not delete the routine.');
       setPendingAction('');
       return;
     }
@@ -664,7 +643,7 @@ export default function Home() {
     setRoutineLogs((current) =>
       current.filter((log) => !(log.user_id === userId && String(log.routine_id) === String(routineId)))
     );
-    showToast(t('home.deleteSuccess'));
+    showToast(isKo ? '루틴을 삭제했어요.' : 'Routine deleted.');
     setPendingAction('');
   };
 
@@ -685,10 +664,11 @@ export default function Home() {
   return (
     <div className="mobile-shell">
       <div className="app-screen home-screen">
-        <header className="home-top-card home-summary-card">
-          <div className="hero-top-row">
+        <header className="home-top-card home-polished-header">
+          <div className="home-header-row">
             <div>
-              <p className="section-eyebrow">{isKo ? '루틴 배틀' : 'Routine battle'}</p>
+              <p className="home-date-label">{todayLabel}</p>
+              <h1 className="home-polished-title">{isKo ? '오늘의 루틴' : 'Today routines'}</h1>
             </div>
 
             <Link className="home-bell-button home-profile-shortcut" to="/mypage" aria-label={t('home.myPageAria')}>
@@ -696,198 +676,236 @@ export default function Home() {
             </Link>
           </div>
 
-          <BattleScoreCard
-            className="home-battle-score-card"
-            eyebrow={isKo ? '이번 주 배틀' : 'This week battle'}
-            title={battleScoreTitle}
-            myLabel={profileLabel}
-            friendLabel={friendLabel}
-            myScore={battleSummary.myScore}
-            friendScore={battleSummary.friendScore}
-            leader={battleSummary.leader}
-            daysLeft={hasBattleStarted ? battleDaysLeft : null}
-            actionHint={battleActionHint}
-            hasFriend={Boolean(friendProfile)}
-            hasBattleStarted={hasBattleStarted}
-            emptyTitle={!friendProfile ? (isKo ? '친구를 연결하면 배틀이 시작돼요' : 'Connect a friend to start') : battleSetupTitle}
-            emptyBody={
-              !friendProfile
-                ? isKo
-                  ? '앱을 열자마자 점수와 리드를 볼 수 있어요.'
-                  : 'You will see scores and the current lead here.'
-                : battleSetupBody
-            }
-            setupHref="/friends"
-            setupLabel={!friendProfile ? (isKo ? '친구 연결하기' : 'Connect friend') : battleSetupAction}
-            ctaHref="/battle"
-            ctaLabel={isKo ? '배틀 보기' : 'View battle'}
-          />
+          <div className="home-overview-row">
+            <span className="home-streak-pill">
+              {streak > 0 ? (isKo ? `${streak}일째` : `${streak}-day streak`) : isKo ? '오늘부터 시작' : 'Start today'}
+            </span>
+            <strong className="home-overview-count">
+              {completedCount}
+              <span> / {personalGoals.length}</span>
+            </strong>
+          </div>
+
+          <Link className="home-battle-teaser" to={battleTeaserHref}>
+            <span>{isKo ? '이번 주 배틀' : 'This week battle'}</span>
+            <strong>{battleTeaserTitle}</strong>
+            <small>{battleTeaserBody}</small>
+          </Link>
         </header>
 
         <main className="home-content home-content-polished">
           <section className="home-section home-section-first">
             <div className="section-header section-header-stack">
               <div>
-                <h2>{t('home.tasksTitle')}</h2>
+                <h2>{isKo ? '오늘의 할 일' : 'Today tasks'}</h2>
                 <p className="section-description">
                   {personalGoals.length === 0
-                    ? t('home.tasksDescriptionEmpty')
+                    ? isKo
+                      ? '루틴을 추가하면 이 화면에서 바로 체크할 수 있어요.'
+                      : 'Add a routine to start from this screen right away.'
                     : remainingCount === 0
-                      ? t('home.tasksDescriptionDone')
-                      : t('home.tasksDescriptionRemaining', { count: remainingCount })}
+                      ? isKo
+                        ? '오늘 계획한 루틴을 모두 끝냈어요.'
+                        : 'You finished everything for today.'
+                      : isKo
+                        ? `${remainingCount}개의 루틴이 남아 있어요.`
+                        : `${remainingCount} routines are still left.`}
                 </p>
               </div>
               <button className="text-button" type="button" onClick={openCreateSheet}>
-                {t('home.add')}
+                {isKo ? '추가' : 'Add'}
               </button>
             </div>
 
             {personalGoals.length === 0 ? (
               <article className="empty-state-card">
-                <h3>{t('home.tasksEmptyTitle')}</h3>
-                <p>{t('home.tasksEmptyBody')}</p>
+                <h3>{isKo ? '오늘 표시할 루틴이 없어요' : 'Nothing to show today'}</h3>
+                <p>
+                  {isKo
+                    ? '반복 요일이나 시간을 정한 루틴을 추가하면 여기에 카드로 정리돼요.'
+                    : 'Add a routine with repeat days or a reminder and it will appear here.'}
+                </p>
                 <button className="inline-action-link" type="button" onClick={openCreateSheet}>
-                  {t('home.addRoutine')}
+                  {isKo ? '루틴 추가하기' : 'Add routine'}
                 </button>
               </article>
             ) : (
               <div className="today-task-list">
-                {personalGoals.map((goal) => (
-                  <article
-                    key={goal.id}
-                    className={getRoutineCardClassName(goal)}
-                  >
-                    {routineFeedback[goal.id] && (
-                      <span
-                        key={routineFeedback[goal.id].id}
-                        className={`routine-feedback-burst routine-feedback-burst-${routineFeedback[goal.id].status}`}
-                      >
-                        {getRoutineFeedbackLabel(routineFeedback[goal.id].status)}
-                      </span>
-                    )}
-                    <div className="home-task-main">
-                      <div className="home-task-top">
-                        <div className="goal-copy">
-                          <h3>{goal.title}</h3>
-                          <div className="routine-chip-row">
-                            <span>{formatRoutineSchedule(goal)}</span>
-                            {goal.reminder_time && <span>{goal.reminder_time.slice(0, 5)}</span>}
-                            <span>{goal.category === 'battle' ? (isKo ? '배틀' : 'Battle') : (isKo ? '개인' : 'Personal')}</span>
-                          </div>
-                          <p>{isKo ? `현재 상태: ${statusLabels[goal.status]}` : `Status: ${statusLabels[goal.status]}`}</p>
-                        </div>
+                {personalGoals.map((goal) => {
+                  const formattedTime = formatRoutineTime(goal.reminder_time, screenLocale);
+                  const scheduleLabel = formatRoutineSchedule(goal);
+                  const noteButtonLabel = expandedNotes[goal.id]
+                    ? isKo
+                      ? '메모 닫기'
+                      : 'Hide note'
+                    : goal.note
+                      ? isKo
+                        ? '메모 보기'
+                        : 'View note'
+                      : isKo
+                        ? '메모 추가'
+                        : 'Add note';
 
-                        <details className="task-menu task-menu-floating">
-                          <summary className="task-menu-trigger" aria-label={t('home.menuAria', { title: goal.title })}>
-                            <span />
-                            <span />
-                            <span />
-                          </summary>
-
-                          <div className="task-menu-popover">
-                            <button className="task-menu-item" type="button" onClick={() => openEditSheet(goal)}>
-                              {t('home.edit')}
-                            </button>
-                            <button
-                              className="task-menu-item"
-                              type="button"
-                              onClick={() => handleCyclePriority(goal)}
-                              disabled={pendingAction === `priority-${goal.id}`}
-                            >
-                              {isKo ? '우선순위 변경' : 'Change priority'}
-                            </button>
-                            <button
-                              className="task-menu-item"
-                              type="button"
-                              onClick={() => handleSetRoutineStatus(goal.id, 'pending', { toggleSame: false })}
-                              disabled={pendingAction === `routine-${goal.id}`}
-                            >
-                              {isKo ? '상태 초기화' : 'Reset status'}
-                            </button>
-                            <button
-                              className="task-menu-item task-menu-item-danger"
-                              type="button"
-                              onClick={() => handleDeleteRoutine(goal.id)}
-                              disabled={pendingAction === `delete-${goal.id}`}
-                            >
-                              {pendingAction === `delete-${goal.id}` ? t('home.deleting') : t('home.delete')}
-                            </button>
-                          </div>
-                        </details>
-                      </div>
-
-                      <div className="home-task-actions">
-                        {(['done', 'partial', 'rest'] as RoutineStatus[]).map((status) => (
-                          <button
-                            key={status}
-                            className={
-                              goal.status === status
-                                ? `routine-status-button routine-status-button-${status} routine-status-button-active`
-                                : `routine-status-button routine-status-button-${status}`
-                            }
-                            type="button"
-                            onClick={() => handleSetRoutineStatus(goal.id, status)}
-                            disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
-                          >
-                            {pendingAction === `routine-${goal.id}` ? t('home.saving') : statusLabels[status]}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="routine-note-toggle-row">
-                        <button
-                          className="routine-note-toggle"
-                          type="button"
-                          onClick={() => toggleNote(goal.id)}
+                  return (
+                    <article key={goal.id} className={getRoutineCardClassName(goal)}>
+                      {routineFeedback[goal.id] && (
+                        <span
+                          key={routineFeedback[goal.id].id}
+                          className={`routine-feedback-burst routine-feedback-burst-${routineFeedback[goal.id].status}`}
                         >
-                          {expandedNotes[goal.id]
-                            ? isKo
-                              ? '메모 접기'
-                              : 'Hide note'
-                            : goal.note
-                              ? isKo
-                                ? '메모 보기'
-                                : 'View note'
-                              : isKo
-                                ? '메모 추가'
-                                : 'Add note'}
-                        </button>
-                      </div>
-
-                      {expandedNotes[goal.id] && (
-                        <label className="routine-note-field" htmlFor={`routine-note-${goal.id}`}>
-                          <input
-                            id={`routine-note-${goal.id}`}
-                            type="text"
-                            placeholder={isKo ? '짧은 메모를 남겨요' : 'Add a short note'}
-                            value={noteDrafts[goal.id] ?? goal.note}
-                            onChange={(event) =>
-                              setNoteDrafts((current) => ({
-                                ...current,
-                                [goal.id]: event.target.value,
-                              }))
-                            }
-                            onBlur={() => handleNoteBlur(goal)}
-                            disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
-                            maxLength={80}
-                          />
-                        </label>
+                          {getRoutineFeedbackLabel(routineFeedback[goal.id].status)}
+                        </span>
                       )}
-                    </div>
-                  </article>
-                ))}
+
+                      <div className="home-task-row">
+                        <button
+                          className={goal.status === 'done' ? 'home-task-check home-task-check-done' : 'home-task-check'}
+                          type="button"
+                          onClick={() =>
+                            handleSetRoutineStatus(goal.id, goal.status === 'done' ? 'pending' : 'done', {
+                              toggleSame: false,
+                            })
+                          }
+                          disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                          aria-label={goal.status === 'done' ? `${goal.title} undo` : `${goal.title} done`}
+                        >
+                          <span>{goal.status === 'done' ? '✓' : ''}</span>
+                        </button>
+
+                        <div className="home-task-main">
+                          <div className="home-task-top">
+                            <div className="home-task-copy">
+                              <h3>{goal.title}</h3>
+                              <p className="home-task-time">{formattedTime || scheduleLabel}</p>
+                            </div>
+
+                            <details className="task-menu task-menu-floating">
+                              <summary className="task-menu-trigger" aria-label={t('home.menuAria', { title: goal.title })}>
+                                <span />
+                                <span />
+                                <span />
+                              </summary>
+
+                              <div className="task-menu-popover">
+                                <button className="task-menu-item" type="button" onClick={() => openEditSheet(goal)}>
+                                  {isKo ? '수정' : 'Edit'}
+                                </button>
+                                <button
+                                  className="task-menu-item"
+                                  type="button"
+                                  onClick={() => handleCyclePriority(goal)}
+                                  disabled={pendingAction === `priority-${goal.id}`}
+                                >
+                                  {isKo ? '우선순위 변경' : 'Change priority'}
+                                </button>
+                                <button
+                                  className="task-menu-item"
+                                  type="button"
+                                  onClick={() => handleSetRoutineStatus(goal.id, 'pending', { toggleSame: false })}
+                                  disabled={pendingAction === `routine-${goal.id}`}
+                                >
+                                  {isKo ? '상태 초기화' : 'Reset status'}
+                                </button>
+                                <button
+                                  className="task-menu-item task-menu-item-danger"
+                                  type="button"
+                                  onClick={() => handleDeleteRoutine(goal.id)}
+                                  disabled={pendingAction === `delete-${goal.id}`}
+                                >
+                                  {pendingAction === `delete-${goal.id}`
+                                    ? isKo
+                                      ? '삭제 중...'
+                                      : 'Deleting...'
+                                    : isKo
+                                      ? '삭제'
+                                      : 'Delete'}
+                                </button>
+                              </div>
+                            </details>
+                          </div>
+
+                          <div className="home-task-meta-row">
+                            <span className={`home-task-status home-task-status-${goal.status}`}>
+                              {statusLabels[goal.status]}
+                            </span>
+
+                            <div className="routine-chip-row">
+                              {goal.reminder_time && <span>{scheduleLabel}</span>}
+                              <span>{goal.category === 'battle' ? (isKo ? '배틀' : 'Battle') : isKo ? '개인' : 'Personal'}</span>
+                            </div>
+                          </div>
+
+                          <div className="home-task-actions home-task-actions-compact">
+                            {(['partial', 'rest'] as const).map((status) => (
+                              <button
+                                key={status}
+                                className={
+                                  goal.status === status
+                                    ? `routine-status-button routine-status-button-${status} routine-status-button-active`
+                                    : `routine-status-button routine-status-button-${status}`
+                                }
+                                type="button"
+                                onClick={() => handleSetRoutineStatus(goal.id, status)}
+                                disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                              >
+                                {pendingAction === `routine-${goal.id}` ? (isKo ? '저장 중...' : 'Saving...') : statusLabels[status]}
+                              </button>
+                            ))}
+
+                            <button
+                              className={
+                                expandedNotes[goal.id]
+                                  ? 'routine-note-toggle routine-note-toggle-chip routine-note-toggle-active'
+                                  : 'routine-note-toggle routine-note-toggle-chip'
+                              }
+                              type="button"
+                              onClick={() => toggleNote(goal.id)}
+                            >
+                              {noteButtonLabel}
+                            </button>
+                          </div>
+
+                          {expandedNotes[goal.id] && (
+                            <label className="routine-note-field" htmlFor={`routine-note-${goal.id}`}>
+                              <input
+                                id={`routine-note-${goal.id}`}
+                                type="text"
+                                placeholder={isKo ? '짧은 메모를 남겨 보세요' : 'Add a short note'}
+                                value={noteDrafts[goal.id] ?? goal.note}
+                                onChange={(event) =>
+                                  setNoteDrafts((current) => ({
+                                    ...current,
+                                    [goal.id]: event.target.value,
+                                  }))
+                                }
+                                onBlur={() => handleNoteBlur(goal)}
+                                disabled={pendingAction === `routine-${goal.id}` || pendingAction === `delete-${goal.id}`}
+                                maxLength={80}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
 
           <section className="home-week-mini-card">
-            <div>
-              <span>{isKo ? '이번 주' : 'This week'}</span>
-              <strong>{weekStats.percent}%</strong>
+            <div className="home-card-heading">
+              <div>
+                <span>{isKo ? '이번 주 기록' : 'This week'}</span>
+                <strong>{weekStats.percent}%</strong>
+              </div>
+              <Link to="/stats">{isKo ? '자세히' : 'Details'}</Link>
             </div>
+
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
             </div>
+
             <div className="traffic-row" aria-label={isKo ? '이번 주 상태' : 'This week status'}>
               {weekStats.daily.map((day) => (
                 <span
@@ -897,13 +915,16 @@ export default function Home() {
                 />
               ))}
             </div>
-            <Link to="/stats">{isKo ? '자세히' : 'Details'}</Link>
           </section>
-
         </main>
 
-        <button className="fab-button fab-button-extended" type="button" onClick={openCreateSheet} aria-label={t('home.addRoutine')}>
-          + {t('home.addRoutine')}
+        <button
+          className="fab-button fab-button-extended"
+          type="button"
+          onClick={openCreateSheet}
+          aria-label={isKo ? '루틴 추가하기' : 'Add routine'}
+        >
+          + {isKo ? '루틴 추가' : 'Add routine'}
         </button>
 
         {toast && (

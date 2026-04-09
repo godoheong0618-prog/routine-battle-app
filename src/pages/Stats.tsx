@@ -13,8 +13,49 @@ import {
   fetchRoutineLogsForUsers,
   getFullWeekDateKeys,
   getLastDateKeys,
+  isPositiveRoutineStatus,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
+
+function getBestStreak(logs: RoutineLogRow[]) {
+  const uniqueDates = Array.from(
+    new Set(
+      logs
+        .filter((log) => isPositiveRoutineStatus(log.status))
+        .map((log) => log.log_date)
+        .filter(Boolean)
+    )
+  ).sort();
+
+  if (uniqueDates.length === 0) {
+    return 0;
+  }
+
+  let best = 1;
+  let current = 1;
+
+  for (let index = 1; index < uniqueDates.length; index += 1) {
+    const previous = new Date(`${uniqueDates[index - 1]}T12:00:00`);
+    const next = new Date(`${uniqueDates[index]}T12:00:00`);
+    const difference = Math.round((next.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (difference === 1) {
+      current += 1;
+      best = Math.max(best, current);
+      continue;
+    }
+
+    current = 1;
+  }
+
+  return best;
+}
+
+function getPreviousWindowEnd(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
+}
 
 export default function Stats() {
   const [userId, setUserId] = useState('');
@@ -26,6 +67,7 @@ export default function Stats() {
   const [error, setError] = useState('');
   const { locale, t } = useLanguage();
   const isKo = locale === 'ko';
+  const screenLocale = isKo ? 'ko-KR' : 'en-US';
 
   useEffect(() => {
     let active = true;
@@ -45,10 +87,7 @@ export default function Stats() {
         const connection = await fetchFriendConnection(ensuredProfile);
         const relatedUserIds = connection.friendProfile ? [user.id, connection.friendProfile.id] : [user.id];
 
-        const { data, error: routinesError } = await supabase
-          .from('routines')
-          .select('*')
-          .in('user_id', relatedUserIds);
+        const { data, error: routinesError } = await supabase.from('routines').select('*').in('user_id', relatedUserIds);
 
         if (routinesError) {
           throw routinesError;
@@ -99,6 +138,14 @@ export default function Stats() {
     () => calculateRoutineStats(myRoutines, routineLogs, userId, getLastDateKeys(7)),
     [myRoutines, routineLogs, userId]
   );
+  const monthStats = useMemo(
+    () => calculateRoutineStats(myRoutines, routineLogs, userId, getLastDateKeys(30)),
+    [myRoutines, routineLogs, userId]
+  );
+  const previousMonthStats = useMemo(
+    () => calculateRoutineStats(myRoutines, routineLogs, userId, getLastDateKeys(30, getPreviousWindowEnd(30))),
+    [myRoutines, routineLogs, userId]
+  );
   const friendWeekStats = useMemo(
     () =>
       friendProfile
@@ -107,6 +154,8 @@ export default function Stats() {
     [friendProfile, friendRoutines, routineLogs]
   );
   const streak = useMemo(() => calculateStreak(myLogs), [myLogs]);
+  const bestStreak = useMemo(() => getBestStreak(myLogs), [myLogs]);
+  const monthDelta = monthStats.percent - previousMonthStats.percent;
   const friendPercent = friendWeekStats?.percent ?? 0;
 
   if (loading) {
@@ -120,88 +169,100 @@ export default function Stats() {
   return (
     <div className="mobile-shell">
       <div className="app-screen subpage-screen stats-screen">
-        <header className="subpage-header">
-          <p className="section-eyebrow">{isKo ? '기록' : 'Stats'}</p>
-          <h1>{isKo ? '이번 주 기록' : 'This week stats'}</h1>
-          <p>{isKo ? '필요한 숫자만 간단히 확인해요.' : 'A compact view of the numbers that matter.'}</p>
+        <header className="subpage-header stats-page-header">
+          <p className="section-eyebrow">{isKo ? '기록 및 통계' : 'Records & stats'}</p>
+          <h1>{isKo ? '기록 및 통계' : 'Records & stats'}</h1>
+          <p>{isKo ? '꾸준히 쌓아가고 있는 나의 성장 기록' : 'A calm snapshot of the consistency you are building.'}</p>
         </header>
 
-        <main className="subpage-content stats-content">
+        <main className="subpage-content stats-content polished-stats-content">
           {error && <p className="error home-error">{error}</p>}
 
-          <section className="stats-hero-card">
-            <span>{isKo ? '주간 달성률' : 'Weekly achievement'}</span>
-            <strong>{weekStats.percent}%</strong>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
+          <section className="stats-kpi-grid">
+            <article className="stats-kpi-card">
+              <span>{isKo ? '현재 연속' : 'Current streak'}</span>
+              <strong>
+                {streak}
+                <em>{isKo ? '일' : 'd'}</em>
+              </strong>
+            </article>
+
+            <article className="stats-kpi-card">
+              <span>{isKo ? '최고 기록' : 'Best record'}</span>
+              <strong>
+                {bestStreak}
+                <em>{isKo ? '일' : 'd'}</em>
+              </strong>
+            </article>
+          </section>
+
+          <section className="stats-feature-card">
+            <div className="stats-feature-top">
+              <div>
+                <span>{isKo ? '평균 완료율' : 'Average completion'}</span>
+                <strong>
+                  {monthStats.percent}
+                  <em>%</em>
+                </strong>
+              </div>
+              <span className="page-chip">{isKo ? '최근 30일' : 'Last 30 days'}</span>
             </div>
+
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${monthStats.percent}%` }} />
+            </div>
+
+            <p className="stats-feature-note">
+              {monthDelta >= 0
+                ? isKo
+                  ? `지난 기간보다 ${monthDelta}% 올랐어요.`
+                  : `Up ${monthDelta}% from the previous window.`
+                : isKo
+                  ? `지난 기간보다 ${Math.abs(monthDelta)}% 낮아요.`
+                  : `${Math.abs(monthDelta)}% lower than the previous window.`}
+            </p>
           </section>
 
-          <section className="stats-card-grid">
-            <article className="stat-card">
-              <span>{isKo ? '현재 streak' : 'Current streak'}</span>
-              <strong>{isKo ? `${streak}일` : `${streak} days`}</strong>
-            </article>
-            <article className="stat-card">
-              <span>{isKo ? '완료' : 'Done'}</span>
-              <strong>{weekStats.doneCount}</strong>
-            </article>
-            <article className="stat-card">
-              <span>{isKo ? '조금 함' : 'Partial'}</span>
-              <strong>{weekStats.partialCount}</strong>
-            </article>
-            <article className="stat-card">
-              <span>{isKo ? '쉼' : 'Rest'}</span>
-              <strong>{weekStats.restCount}</strong>
-            </article>
-          </section>
-
-          <section className="section-block">
+          <section className="stats-week-card">
             <div className="section-header section-header-stack">
               <div>
-                <h2>{isKo ? '최근 7일' : 'Last 7 days'}</h2>
-                <p className="section-description">{isKo ? '초록/노랑/회색/빨강으로 상태를 구분해요.' : 'Green, yellow, gray, and red show the flow.'}</p>
+                <h2>{isKo ? '최근 7일 완료 내역' : 'Last 7 days'}</h2>
+                <p className="section-description">
+                  {isKo ? '한눈에 흐름을 보도록 요일별로 정리했어요.' : 'A simple weekday flow of your recent rhythm.'}
+                </p>
               </div>
             </div>
-            <div className="stats-seven-card">
+
+            <div className="stats-week-row">
               {sevenDayStats.daily.map((day) => (
-                <div key={day.dateKey} className="stats-day-cell">
-                  <span className={`traffic-cell traffic-cell-${day.status}`} />
-                  <strong>{day.dateKey.slice(5)}</strong>
-                  <small>{day.percent}%</small>
+                <div key={day.dateKey} className="stats-week-day">
+                  <span>{new Intl.DateTimeFormat(screenLocale, { weekday: 'short' }).format(new Date(`${day.dateKey}T12:00:00`))}</span>
+                  <strong className={`stats-week-dot stats-week-dot-${day.status}`}>{day.status === 'done' ? '✓' : ''}</strong>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="section-block">
-            <div className="section-header section-header-stack">
-              <div>
-                <h2>{isKo ? '친구와 비교' : 'Friend comparison'}</h2>
-                <p className="section-description">{friendProfile ? `${profileLabel} vs ${friendLabel}` : t('home.battleWaiting')}</p>
+          <section className="stats-compare-card stats-compare-bars">
+            <article>
+              <div className="stats-compare-row">
+                <span>{profileLabel}</span>
+                <strong>{weekStats.percent}%</strong>
               </div>
-            </div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
+              </div>
+            </article>
 
-            <div className="stats-compare-card stats-compare-bars">
-              <article>
-                <div className="stats-compare-row">
-                  <span>{profileLabel}</span>
-                  <strong>{weekStats.percent}%</strong>
-                </div>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
-                </div>
-              </article>
-              <article>
-                <div className="stats-compare-row">
-                  <span>{friendLabel}</span>
-                  <strong>{friendWeekStats ? `${friendPercent}%` : '-'}</strong>
-                </div>
-                <div className="progress-track">
-                  <div className="progress-fill progress-fill-muted" style={{ width: `${friendPercent}%` }} />
-                </div>
-              </article>
-            </div>
+            <article>
+              <div className="stats-compare-row">
+                <span>{friendProfile ? friendLabel : isKo ? '친구 없음' : 'No friend'}</span>
+                <strong>{friendWeekStats ? `${friendPercent}%` : '-'}</strong>
+              </div>
+              <div className="progress-track">
+                <div className="progress-fill progress-fill-muted" style={{ width: `${friendPercent}%` }} />
+              </div>
+            </article>
           </section>
         </main>
 
