@@ -2,9 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../components/AuthProvider';
 import BottomTabBar from '../components/BottomTabBar';
+import ProfileAvatar from '../components/profile/ProfileAvatar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Locale } from '../i18n/messages';
 import { getAuthCopy } from '../lib/auth';
+import {
+  DEFAULT_AVATAR_EMOJI,
+  DEFAULT_THEME_COLOR,
+  PROFILE_EMOJI_OPTIONS,
+  PROFILE_THEME_OPTIONS,
+  ThemeColorKey,
+  getProfileAppearance,
+  normalizeThemeColor,
+} from '../lib/profileAppearance';
 import { formatSelfLabel } from '../lib/nameDisplay';
 import {
   ProfileRow,
@@ -18,6 +28,7 @@ import {
 import { supabase } from '../supabaseClient';
 
 const LANGUAGE_OPTIONS: Locale[] = ['ko', 'en'];
+const PROFILE_SELECT = 'id, nickname, friend_code, friend_id, avatar_emoji, theme_color';
 
 function GlobeIcon() {
   return (
@@ -53,8 +64,12 @@ export default function MyPage() {
   const [sharedCheckins, setSharedCheckins] = useState<SharedGoalCheckinRow[]>([]);
   const [routineCount, setRoutineCount] = useState(0);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [languageOpen, setLanguageOpen] = useState(false);
+  const [savingAppearance, setSavingAppearance] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState(DEFAULT_AVATAR_EMOJI);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeColorKey>(DEFAULT_THEME_COLOR);
   const navigate = useNavigate();
   const { locale, setLocale, t } = useLanguage();
   const { signOut, user } = useAuth();
@@ -73,6 +88,8 @@ export default function MyPage() {
       try {
         const ensuredProfile = await ensureProfile(currentUser);
         setProfile(ensuredProfile);
+        setSelectedEmoji(ensuredProfile.avatar_emoji || DEFAULT_AVATAR_EMOJI);
+        setSelectedTheme(normalizeThemeColor(ensuredProfile.theme_color));
 
         const [routineResult, checkinsResult, sharedResult] = await Promise.allSettled([
           supabase.from('routines').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
@@ -100,12 +117,29 @@ export default function MyPage() {
     loadProfile();
   }, [navigate, t]);
 
-  const totalCompletions = personalCheckins.filter((log) => isPositiveRoutineStatus(log.status)).length + sharedCheckins.length;
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setNotice(''), 2400);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const totalCompletions =
+    personalCheckins.filter((log) => isPositiveRoutineStatus(log.status)).length + sharedCheckins.length;
   const streak = useMemo(() => calculateStreak(personalCheckins), [personalCheckins]);
   const authCopy = useMemo(() => getAuthCopy(locale), [locale]);
   const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('my.profileFallback') });
   const currentLanguageLabel = locale === 'ko' ? '한국어' : 'English';
   const email = user?.email ?? '';
+  const previewAppearance = useMemo(
+    () => getProfileAppearance({ avatar_emoji: selectedEmoji, theme_color: selectedTheme }),
+    [selectedEmoji, selectedTheme],
+  );
+  const appearanceChanged =
+    (profile?.avatar_emoji || DEFAULT_AVATAR_EMOJI) !== selectedEmoji ||
+    normalizeThemeColor(profile?.theme_color) !== selectedTheme;
 
   const handleLogout = async () => {
     const { error: signOutError } = await signOut();
@@ -114,6 +148,37 @@ export default function MyPage() {
       return;
     }
     navigate('/login', { replace: true });
+  };
+
+  const handleSaveAppearance = async () => {
+    if (!profile) {
+      return;
+    }
+
+    setSavingAppearance(true);
+    setError('');
+    setNotice('');
+
+    const { data, error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        avatar_emoji: selectedEmoji,
+        theme_color: selectedTheme,
+      })
+      .eq('id', profile.id)
+      .select(PROFILE_SELECT)
+      .single();
+
+    if (updateError) {
+      console.warn('Profile appearance save failed:', updateError);
+      setError(locale === 'ko' ? '프로필 꾸미기를 저장하지 못했어요.' : 'Could not save your profile style.');
+      setSavingAppearance(false);
+      return;
+    }
+
+    setProfile(data as ProfileRow);
+    setNotice(locale === 'ko' ? '프로필 꾸미기를 저장했어요.' : 'Profile style saved.');
+    setSavingAppearance(false);
   };
 
   if (loading) {
@@ -133,32 +198,137 @@ export default function MyPage() {
 
         <main className="service-page-content service-profile-page">
           {error ? <p className="error home-error">{error}</p> : null}
+          {notice ? <p className="service-inline-notice">{notice}</p> : null}
 
-          <section className="service-card service-profile-card">
+          <section
+            className="service-card service-profile-card"
+            style={{ background: previewAppearance.cardBackground, borderColor: previewAppearance.cardBorder }}
+          >
             <div className="service-profile-top">
-              <div className="service-profile-avatar">{profileLabel.slice(0, 1)}</div>
+              <ProfileAvatar
+                profile={{ avatar_emoji: selectedEmoji, theme_color: selectedTheme }}
+                label={profileLabel}
+                size="lg"
+              />
               <div className="service-profile-copy">
                 <div className="service-profile-name-row">
                   <h2>{profileLabel}</h2>
-                  <span>✎</span>
                 </div>
                 <p>{email || 'minjun@example.com'}</p>
               </div>
             </div>
 
             <div className="service-profile-stats">
-              <article className="service-profile-stat">
+              <article
+                className="service-profile-stat"
+                style={{ background: previewAppearance.softSurface, border: `1px solid ${previewAppearance.softBorder}` }}
+              >
                 <strong>{totalCompletions}</strong>
                 <span>{locale === 'ko' ? '총 완료' : 'Completed'}</span>
               </article>
-              <article className="service-profile-stat">
+              <article
+                className="service-profile-stat"
+                style={{ background: previewAppearance.softSurface, border: `1px solid ${previewAppearance.softBorder}` }}
+              >
                 <strong>{streak}</strong>
                 <span>{locale === 'ko' ? '연속' : 'Streak'}</span>
               </article>
-              <article className="service-profile-stat">
+              <article
+                className="service-profile-stat"
+                style={{ background: previewAppearance.softSurface, border: `1px solid ${previewAppearance.softBorder}` }}
+              >
                 <strong>{routineCount}</strong>
                 <span>{locale === 'ko' ? '루틴' : 'Routines'}</span>
               </article>
+            </div>
+          </section>
+
+          <section className="service-card service-profile-customize-card">
+            <div className="service-section-copy">
+              <h2>{locale === 'ko' ? '프로필 꾸미기' : 'Customize profile'}</h2>
+              <p>
+                {locale === 'ko'
+                  ? '이모티콘과 테마 색을 고르면 배틀, 친구, 마이페이지에 함께 반영돼요.'
+                  : 'Pick an emoji and theme color for battle, friends, and your profile.'}
+              </p>
+            </div>
+
+            <div
+              className="service-profile-customize-preview"
+              style={{ background: previewAppearance.softSurface, borderColor: previewAppearance.softBorder }}
+            >
+              <ProfileAvatar
+                profile={{ avatar_emoji: selectedEmoji, theme_color: selectedTheme }}
+                label={profileLabel}
+                size="md"
+              />
+              <div className="service-profile-customize-copy">
+                <strong>{profileLabel}</strong>
+                <p>
+                  {locale === 'ko'
+                    ? `${previewAppearance.label.ko} 테마 · ${selectedEmoji}`
+                    : `${previewAppearance.label.en} theme · ${selectedEmoji}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="service-profile-picker-block">
+              <div className="service-picker-label-row">
+                <strong>{locale === 'ko' ? '이모티콘' : 'Emoji'}</strong>
+                <span>{locale === 'ko' ? '하나를 선택하세요' : 'Choose one'}</span>
+              </div>
+              <div className="service-emoji-grid">
+                {PROFILE_EMOJI_OPTIONS.map((emoji) => {
+                  const active = selectedEmoji === emoji;
+
+                  return (
+                    <button
+                      key={emoji}
+                      className={active ? 'service-emoji-option service-emoji-option-active' : 'service-emoji-option'}
+                      type="button"
+                      onClick={() => setSelectedEmoji(emoji)}
+                    >
+                      <span>{emoji}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="service-profile-picker-block">
+              <div className="service-picker-label-row">
+                <strong>{locale === 'ko' ? '테마 색' : 'Theme color'}</strong>
+                <span>{locale === 'ko' ? '미리 정해진 색상만 사용할 수 있어요' : 'Preset colors only'}</span>
+              </div>
+              <div className="service-theme-grid">
+                {PROFILE_THEME_OPTIONS.map((theme) => {
+                  const active = selectedTheme === theme.key;
+
+                  return (
+                    <button
+                      key={theme.key}
+                      className={active ? 'service-theme-option service-theme-option-active' : 'service-theme-option'}
+                      type="button"
+                      onClick={() => setSelectedTheme(theme.key)}
+                    >
+                      <span className="service-theme-swatch" style={{ backgroundColor: theme.swatch }} />
+                      <strong>{locale === 'ko' ? theme.label.ko : theme.label.en}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="service-customize-actions">
+              <button className="primary-button" type="button" onClick={handleSaveAppearance} disabled={!appearanceChanged || savingAppearance}>
+                {savingAppearance
+                  ? locale === 'ko'
+                    ? '저장 중...'
+                    : 'Saving...'
+                  : locale === 'ko'
+                    ? '저장'
+                    : 'Save'}
+              </button>
             </div>
           </section>
 
@@ -191,7 +361,7 @@ export default function MyPage() {
                         onClick={() => setLocale(option)}
                       >
                         <span>{label}</span>
-                        <strong>{selected ? '✓' : ''}</strong>
+                        <strong>{selected ? '선택됨' : ''}</strong>
                       </button>
                     );
                   })}

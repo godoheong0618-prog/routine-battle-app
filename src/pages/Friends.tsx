@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
 import BottomTabBar from '../components/BottomTabBar';
+import ProfileAvatar from '../components/profile/ProfileAvatar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { formatBattlePairLabel, formatUserCompanion, formatUserLabel } from '../lib/nameDisplay';
+import { getProfileAppearance } from '../lib/profileAppearance';
 import {
   FriendshipRow,
   ProfileRow,
@@ -67,7 +69,10 @@ export default function Friends() {
   const weekKeys = getWeekDateKeys();
 
   useEffect(() => {
-    if (!toast) return;
+    if (!toast) {
+      return;
+    }
+
     const timer = window.setTimeout(() => setToast((current) => (current?.id === toast.id ? null : current)), 2400);
     return () => window.clearTimeout(timer);
   }, [toast]);
@@ -139,10 +144,20 @@ export default function Friends() {
   const showToast = (message: string) => setToast({ id: Date.now(), message });
   const friendName = formatUserLabel(friendProfile?.nickname, { locale, fallback: isKo ? '친구' : 'Friend' });
   const friendCompanion = formatUserCompanion(friendProfile?.nickname, { locale, fallback: isKo ? '친구' : 'Friend' });
-  const defaultBattleTitle = formatBattlePairLabel({ locale, leftName: profile?.nickname, rightName: friendProfile?.nickname, leftFallback: isKo ? '나' : 'Me' });
+  const defaultBattleTitle = formatBattlePairLabel({
+    locale,
+    leftName: profile?.nickname,
+    rightName: friendProfile?.nickname,
+    leftFallback: isKo ? '나' : 'Me',
+  });
+  const myAppearance = getProfileAppearance(profile);
+  const friendAppearance = getProfileAppearance(friendProfile);
 
   const handleCopyCode = async () => {
-    if (!profile?.friend_code) return;
+    if (!profile?.friend_code) {
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(profile.friend_code);
       showToast(isKo ? '초대 코드를 복사했어요.' : 'Invite code copied.');
@@ -153,16 +168,26 @@ export default function Friends() {
 
   const handleConnectFriend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!profile) return;
+    if (!profile) {
+      return;
+    }
+
     setSubmitting(true);
     setError('');
+
     try {
       await connectFriendByCode(profile, inviteCode);
       setInviteCode('');
       showToast(isKo ? '친구를 연결했어요.' : 'Friend connected.');
       await loadFriends();
     } catch (connectError) {
-      setError(connectError instanceof Error ? connectError.message : isKo ? '친구 연결에 실패했어요.' : 'Could not connect your friend.');
+      setError(
+        connectError instanceof Error
+          ? connectError.message
+          : isKo
+            ? '친구 연결에 실패했어요.'
+            : 'Could not connect your friend.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -170,9 +195,13 @@ export default function Friends() {
 
   const handleSaveBattleSetup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!friendProfile || !battleMeta) return;
+    if (!friendProfile || !battleMeta) {
+      return;
+    }
+
     setSavingBattle(true);
     setError('');
+
     const { error: updateError } = await supabase
       .from('friendships')
       .update({
@@ -192,7 +221,7 @@ export default function Friends() {
             : 'Battle setup columns are missing in the database. Apply the SQL first.'
           : isKo
             ? '배틀 설정을 저장하지 못했어요.'
-            : 'Could not save battle setup.'
+            : 'Could not save battle setup.',
       );
       setSavingBattle(false);
       return;
@@ -205,17 +234,30 @@ export default function Friends() {
   };
 
   const handleDisconnectFriend = async () => {
-    if (!profile) return;
+    if (!profile) {
+      return;
+    }
+
     const confirmed = window.confirm(isKo ? '친구 연결을 해제할까요?' : 'Remove this friend connection?');
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
+
     setDisconnecting(true);
     setError('');
+
     try {
       await disconnectFriendConnection(profile, battleMeta?.id ?? null);
       showToast(isKo ? '친구 연결을 해제했어요.' : 'Friend connection removed.');
       await loadFriends();
     } catch (disconnectError) {
-      setError(disconnectError instanceof Error ? disconnectError.message : isKo ? '친구 연결을 해제하지 못했어요.' : 'Could not remove the friend connection.');
+      setError(
+        disconnectError instanceof Error
+          ? disconnectError.message
+          : isKo
+            ? '친구 연결을 해제하지 못했어요.'
+            : 'Could not remove the friend connection.',
+      );
     } finally {
       setDisconnecting(false);
     }
@@ -240,15 +282,23 @@ export default function Friends() {
         <main className="service-page-content service-friends-page">
           {error ? <p className="error home-error">{error}</p> : null}
 
-          <section className="service-card service-invite-card">
+          <section
+            className="service-card service-invite-card"
+            style={{ background: myAppearance.cardBackground, borderColor: myAppearance.cardBorder }}
+          >
             <p className="service-card-label">{isKo ? '내 초대 코드' : 'My invite code'}</p>
             <div className="service-invite-code-row">
               <strong>{profile?.friend_code ?? '--------'}</strong>
-              <button className="service-circle-button" type="button" onClick={handleCopyCode} aria-label={isKo ? '초대 코드 복사' : 'Copy invite code'}>
+              <button
+                className="service-circle-button"
+                type="button"
+                onClick={handleCopyCode}
+                aria-label={isKo ? '초대 코드 복사' : 'Copy invite code'}
+              >
                 <CopyIcon />
               </button>
             </div>
-            <p>{isKo ? '친구에게 이 코드를 공유하면 바로 연결됩니다' : 'Share this code and your friend can connect instantly.'}</p>
+            <p>{isKo ? '친구에게 이 코드를 공유하면 바로 연결됩니다.' : 'Share this code and your friend can connect instantly.'}</p>
           </section>
 
           {!friendProfile ? (
@@ -271,28 +321,48 @@ export default function Friends() {
             </section>
           ) : (
             <>
-              <section className="service-card service-friend-profile-card">
+              <section
+                className="service-card service-friend-profile-card"
+                style={{ background: friendAppearance.cardBackground, borderColor: friendAppearance.cardBorder }}
+              >
                 <div className="service-friend-profile-top">
-                  <div className="service-friend-avatar">{friendName.slice(0, 1)}</div>
+                  <ProfileAvatar profile={friendProfile} label={friendName} size="lg" />
                   <div className="service-friend-copy">
                     <h2>{friendName}</h2>
                     <p>{friendProfile.friend_code ?? 'BATTLE-0000'}</p>
                   </div>
-                  <button className="service-ghost-icon-button" type="button" onClick={handleDisconnectFriend} disabled={disconnecting} aria-label={isKo ? '친구 연결 해제' : 'Disconnect friend'}>
+                  <button
+                    className="service-ghost-icon-button"
+                    type="button"
+                    onClick={handleDisconnectFriend}
+                    disabled={disconnecting}
+                    aria-label={isKo ? '친구 연결 해제' : 'Disconnect friend'}
+                  >
                     <UserPlusIcon />
                   </button>
                 </div>
 
                 <div className="service-friend-stat-grid">
-                  <article className="service-friend-stat-card">
-                    <strong>{friendStats.todayDone}/{friendStats.todayTotal || 0}</strong>
+                  <article
+                    className="service-friend-stat-card"
+                    style={{ background: friendAppearance.softSurface, border: `1px solid ${friendAppearance.softBorder}` }}
+                  >
+                    <strong>
+                      {friendStats.todayDone}/{friendStats.todayTotal || 0}
+                    </strong>
                     <span>{isKo ? '오늘' : 'Today'}</span>
                   </article>
-                  <article className="service-friend-stat-card">
+                  <article
+                    className="service-friend-stat-card"
+                    style={{ background: friendAppearance.softSurface, border: `1px solid ${friendAppearance.softBorder}` }}
+                  >
                     <strong>{friendStats.streak}</strong>
                     <span>{isKo ? '연속' : 'Streak'}</span>
                   </article>
-                  <article className="service-friend-stat-card">
+                  <article
+                    className="service-friend-stat-card"
+                    style={{ background: friendAppearance.softSurface, border: `1px solid ${friendAppearance.softBorder}` }}
+                  >
                     <strong>{friendStats.weekWins}</strong>
                     <span>{isKo ? '주간 승' : 'Weekly wins'}</span>
                   </article>
@@ -314,11 +384,23 @@ export default function Friends() {
                   <form className="service-form-stack" onSubmit={handleSaveBattleSetup}>
                     <label className="field-group" htmlFor="battle-title">
                       <span>{isKo ? '배틀 이름' : 'Battle name'}</span>
-                      <input id="battle-title" type="text" value={battleTitle} onChange={(event) => setBattleTitle(event.target.value)} placeholder={defaultBattleTitle} />
+                      <input
+                        id="battle-title"
+                        type="text"
+                        value={battleTitle}
+                        onChange={(event) => setBattleTitle(event.target.value)}
+                        placeholder={defaultBattleTitle}
+                      />
                     </label>
                     <label className="field-group" htmlFor="battle-wager">
                       <span>{isKo ? '내기' : 'Wager'}</span>
-                      <input id="battle-wager" type="text" value={wagerText} onChange={(event) => setWagerText(event.target.value)} placeholder={isKo ? '예: 진 사람이 커피 사기' : 'e.g. Loser buys coffee'} />
+                      <input
+                        id="battle-wager"
+                        type="text"
+                        value={wagerText}
+                        onChange={(event) => setWagerText(event.target.value)}
+                        placeholder={isKo ? '예: 진 사람이 커피 사기' : 'e.g. Loser buys coffee'}
+                      />
                     </label>
                     <button className="primary-button" type="submit" disabled={savingBattle}>
                       {savingBattle ? (isKo ? '저장 중...' : 'Saving...') : isKo ? '저장' : 'Save'}

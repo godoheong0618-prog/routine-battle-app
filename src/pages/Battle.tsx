@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
-import { AvatarConfig } from '../components/battle/AvatarBadge';
 import BattleHeader from '../components/battle/BattleHeader';
 import BattleScoreCard from '../components/battle/BattleScoreCard';
 import SharedRoutineList, { SharedRoutineItem } from '../components/battle/SharedRoutineList';
@@ -9,6 +8,7 @@ import TodayProgressCard from '../components/battle/TodayProgressCard';
 import WeeklyChartCard, { WeeklyBarDatum } from '../components/battle/WeeklyChartCard';
 import { useLanguage } from '../i18n/LanguageContext';
 import { formatOpponentLabel, formatSelfLabel } from '../lib/nameDisplay';
+import { getProfileAppearance } from '../lib/profileAppearance';
 import {
   FriendshipRow,
   NudgeRow,
@@ -90,8 +90,6 @@ export default function Battle() {
   const [pendingAction, setPendingAction] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
-  const [myAvatar] = useState<AvatarConfig>({ avatarBgColor: '#ffd348', avatarEmoji: '😊' });
-  const [opponentAvatar] = useState<AvatarConfig>({ avatarBgColor: '#111111', avatarEmoji: '🦊' });
   const navigate = useNavigate();
   const { locale, t } = useLanguage();
   const isKo = locale === 'ko';
@@ -152,6 +150,8 @@ export default function Battle() {
 
   const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: isKo ? '나' : 'Me' });
   const opponentLabel = formatOpponentLabel(friendProfile?.nickname, { locale });
+  const myAppearance = useMemo(() => getProfileAppearance(profile), [profile]);
+  const opponentAppearance = useMemo(() => getProfileAppearance(friendProfile), [friendProfile]);
   const hasBattleStarted = Boolean(friendProfile && battleMeta?.battle_started_at);
   const battleSummary = useMemo(() => calculateBattleScores({ currentUserId: userId, friendId: friendProfile?.id ?? null, checkins: routineLogs, sharedGoalCheckins, sharedGoals, routines }), [friendProfile?.id, routineLogs, routines, sharedGoalCheckins, sharedGoals, userId]);
   const weekKeys = useMemo(() => getWeekDateKeys(), []);
@@ -250,7 +250,31 @@ export default function Battle() {
           {error ? <p className="error home-error">{error}</p> : null}
           {!friendProfile ? <article className="service-card service-empty-card"><h3>{isKo ? '배틀할 친구가 아직 없어요.' : 'No friend connected yet.'}</h3><p>{isKo ? '친구를 연결하면 배틀 현황과 공동 목표가 이 화면에 나타나요.' : 'Connect a friend to unlock this screen.'}</p><Link className="service-text-link" to="/friends">{isKo ? '친구 연결하기' : 'Open Friends'}</Link></article> : !hasBattleStarted ? <article className="service-card service-empty-card"><h3>{isKo ? `${opponentLabel}님과 배틀 준비 중이에요.` : `You are almost ready to battle ${opponentLabel}.`}</h3><p>{isKo ? '친구 화면에서 배틀 제목과 내기를 정하면 비교 정보가 여기에서 열려요.' : 'Set the battle title and wager in Friends to unlock the comparison view.'}</p><Link className="service-text-link" to="/friends">{isKo ? '친구 화면으로 이동' : 'Open Friends'}</Link></article> : <>
             <BattleHeader title={isKo ? '배틀 현황' : 'Battle'} subtitle={isKo ? `${opponentLabel}님과의 4주차 배틀` : `Week 4 battle with ${opponentLabel}`} countdown={`D-${getDaysUntilWeekEnd()}`} />
-            <BattleScoreCard me={{ name: isKo ? '나' : 'Me', completed: myTodayCompletedCount, total: Math.max(1, myTodayVisibleCount), points: battleSummary.myScore, avatarBgColor: myAvatar.avatarBgColor, avatarEmoji: myAvatar.avatarEmoji }} opponent={{ name: opponentLabel, completed: friendTodayCompletedCount, total: Math.max(1, friendTodayVisibleCount), points: battleSummary.friendScore, avatarBgColor: opponentAvatar.avatarBgColor, avatarEmoji: opponentAvatar.avatarEmoji, ring: true }} statusText={differenceText === 0 ? isKo ? '지금은 같은 수로 진행 중이에요.' : 'You are moving at the same pace.' : differenceText > 0 ? isKo ? `${differenceText}개 차이로 앞서고 있어요.` : `You are ahead by ${differenceText}.` : isKo ? `${Math.abs(differenceText)}개 차이로 뒤지고 있어요.` : `You are behind by ${Math.abs(differenceText)}.`} helperText={actionHint} />
+            <BattleScoreCard
+              me={{
+                name: isKo ? '나' : 'Me',
+                completed: myTodayCompletedCount,
+                total: Math.max(1, myTodayVisibleCount),
+                points: battleSummary.myScore,
+                avatarBgColor: myAppearance.avatarBg,
+                avatarEmoji: myAppearance.avatarEmoji,
+                avatarTextColor: myAppearance.avatarText,
+                avatarBorderColor: myAppearance.avatarBorder,
+              }}
+              opponent={{
+                name: opponentLabel,
+                completed: friendTodayCompletedCount,
+                total: Math.max(1, friendTodayVisibleCount),
+                points: battleSummary.friendScore,
+                avatarBgColor: opponentAppearance.avatarBg,
+                avatarEmoji: opponentAppearance.avatarEmoji,
+                avatarTextColor: opponentAppearance.avatarText,
+                avatarBorderColor: opponentAppearance.avatarBorder,
+                ring: true,
+              }}
+              statusText={differenceText === 0 ? isKo ? '지금은 같은 수로 진행 중이에요.' : 'You are moving at the same pace.' : differenceText > 0 ? isKo ? `${differenceText}개 차이로 앞서고 있어요.` : `You are ahead by ${differenceText}.` : isKo ? `${Math.abs(differenceText)}개 차이로 뒤지고 있어요.` : `You are behind by ${Math.abs(differenceText)}.`}
+              helperText={actionHint}
+            />
             <TodayProgressCard myCount={myTodayCompletedCount} opponentCount={friendTodayCompletedCount} opponentName={opponentLabel} />
             <button className="battle-clone-nudge-button" type="button" onClick={() => handleSendNudge()}><BellIcon /><span>{isKo ? `${opponentLabel}님 콕 찌르기` : `Nudge ${opponentLabel}`}</span></button>
             <div className="service-inline-button-row"><button className="service-inline-pill-button" type="button" onClick={() => setSharedGoalSheetOpen(true)}>{isKo ? '공동 목표 추가' : 'Add shared goal'}</button><Link className="service-inline-pill-button" to="/friends">{isKo ? '친구 설정' : 'Friend settings'}</Link></div>

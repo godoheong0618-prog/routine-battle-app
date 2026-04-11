@@ -5834,6 +5834,7 @@ body {
   border-radius: 16px;
   display: grid;
   place-items: center;
+  border: 1px solid transparent;
 }
 
 .battle-clone-avatar span {

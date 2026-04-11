@@ -5,6 +5,8 @@ create table if not exists public.profiles (
   nickname text,
   friend_code text,
   friend_id uuid,
+  avatar_emoji text not null default '😀',
+  theme_color text not null default 'yellow',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -12,6 +14,8 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists nickname text;
 alter table public.profiles add column if not exists friend_code text;
 alter table public.profiles add column if not exists friend_id uuid;
+alter table public.profiles add column if not exists avatar_emoji text not null default '😀';
+alter table public.profiles add column if not exists theme_color text not null default 'yellow';
 alter table public.profiles add column if not exists created_at timestamptz not null default now();
 alter table public.profiles add column if not exists updated_at timestamptz not null default now();
 
@@ -417,6 +421,15 @@ begin
     alter table public.profiles
       add constraint profiles_friend_id_fkey
       foreign key (friend_id) references auth.users(id) on delete set null;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'profiles_theme_color_check'
+  ) then
+    alter table public.profiles
+      add constraint profiles_theme_color_check
+      check (theme_color in ('yellow', 'navy', 'mint', 'pink', 'purple', 'gray'));
   end if;
 
   if not exists (

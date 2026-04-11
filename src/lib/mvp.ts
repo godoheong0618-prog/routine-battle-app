@@ -1,11 +1,14 @@
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
+import { DEFAULT_AVATAR_EMOJI, DEFAULT_THEME_COLOR, normalizeThemeColor } from './profileAppearance';
 
 export type ProfileRow = {
   id: string;
   nickname: string | null;
   friend_code: string | null;
   friend_id: string | null;
+  avatar_emoji: string | null;
+  theme_color: string | null;
 };
 
 export type RoutineDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
@@ -87,6 +90,7 @@ export type BattleLeader = 'me' | 'friend' | 'tied' | 'waiting';
 const FRIENDSHIP_BASE_SELECT = 'id,user_id,friend_id,created_at';
 const FRIENDSHIP_CORE_SELECT =
   'id,user_id,friend_id,created_at,battle_title,wager_text,battle_status,battle_started_at';
+const PROFILE_SELECT = 'id, nickname, friend_code, friend_id, avatar_emoji, theme_color';
 
 type DatedCheckin = {
   log_date?: string | null;
@@ -715,7 +719,7 @@ async function withResolvedFriend(profile: ProfileRow) {
 export async function ensureProfile(user: Pick<User, 'id' | 'email'>) {
   const { data: existing, error } = await supabase
     .from('profiles')
-    .select('id, nickname, friend_code, friend_id')
+    .select(PROFILE_SELECT)
     .eq('id', user.id)
     .maybeSingle();
 
@@ -724,15 +728,25 @@ export async function ensureProfile(user: Pick<User, 'id' | 'email'>) {
   }
 
   if (existing) {
-    if (existing.friend_code) {
+    const nextFriendCode = existing.friend_code?.trim() ? existing.friend_code : generateFriendCode(user.id);
+    const nextThemeColor = normalizeThemeColor(existing.theme_color);
+    const nextAvatarEmoji = existing.avatar_emoji?.trim() ? existing.avatar_emoji : DEFAULT_AVATAR_EMOJI;
+    const needsProfileUpdate =
+      !existing.friend_code?.trim() || !existing.avatar_emoji?.trim() || existing.theme_color !== nextThemeColor;
+
+    if (!needsProfileUpdate) {
       return withResolvedFriend(existing as ProfileRow);
     }
 
     const { data: updated, error: updateError } = await supabase
       .from('profiles')
-      .update({ friend_code: generateFriendCode(user.id) })
+      .update({
+        friend_code: nextFriendCode,
+        avatar_emoji: nextAvatarEmoji,
+        theme_color: nextThemeColor,
+      })
       .eq('id', user.id)
-      .select('id, nickname, friend_code, friend_id')
+      .select(PROFILE_SELECT)
       .single();
 
     if (updateError) {
@@ -749,8 +763,10 @@ export async function ensureProfile(user: Pick<User, 'id' | 'email'>) {
       nickname: null,
       friend_code: generateFriendCode(user.id),
       friend_id: null,
+      avatar_emoji: DEFAULT_AVATAR_EMOJI,
+      theme_color: DEFAULT_THEME_COLOR,
     })
-    .select('id, nickname, friend_code, friend_id')
+    .select(PROFILE_SELECT)
     .single();
 
   if (insertError) {
@@ -767,7 +783,7 @@ export async function fetchProfile(profileId: string | null) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, nickname, friend_code, friend_id')
+    .select(PROFILE_SELECT)
     .eq('id', profileId)
     .maybeSingle();
 
@@ -839,7 +855,7 @@ export async function connectFriendByCode(currentProfile: ProfileRow, inviteCode
 
   const { data: targetData, error: targetError } = await supabase
     .from('profiles')
-    .select('id, nickname, friend_code, friend_id')
+    .select(PROFILE_SELECT)
     .eq('friend_code', normalizedCode)
     .limit(1)
     .maybeSingle();
