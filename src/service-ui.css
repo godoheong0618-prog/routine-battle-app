@@ -375,40 +375,47 @@
   color: rgba(255, 255, 255, 0.62);
 }
 
-.service-week-strip {
+.service-week-strip,
+.service-week-card-list {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
 }
 
 .service-week-pill,
-.service-week-card-day {
+.service-week-card-day,
+.service-week-day-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
 
-.service-week-pill {
+.service-week-pill,
+.service-week-day-card {
   padding: 10px 0;
   border: 1px solid #ddd8d0;
-  border-radius: 16px;
+  border-radius: 18px;
   background: #ffffff;
 }
 
-.service-week-pill-active {
+.service-week-pill-active,
+.service-week-day-card-active {
   background: #111111;
   color: #ffffff;
   border-color: #111111;
 }
 
 .service-week-pill span,
-.service-week-pill small {
+.service-week-pill small,
+.service-week-day-label,
+.service-week-day-date {
   font-size: 11px;
   font-weight: 700;
 }
 
-.service-week-pill-mark {
+.service-week-pill-mark,
+.service-week-state {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -416,11 +423,22 @@
   height: 28px;
   border-radius: 999px;
   background: #f0efeb;
+  font-size: 13px;
+  font-weight: 800;
 }
 
-.service-week-pill-active .service-week-pill-mark {
+.service-week-pill-active .service-week-pill-mark,
+.service-week-day-card-active .service-week-state {
   background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
+}
+
+.service-week-state-partial {
+  background: #ece8df;
+}
+
+.service-week-state-rest {
+  background: #e7e7e4;
 }
 
 .service-routine-groups,
@@ -470,6 +488,11 @@
   position: relative;
 }
 
+.service-routine-card-simple {
+  gap: 10px;
+  padding: 14px 16px;
+}
+
 .service-check-button {
   display: inline-flex;
   align-items: center;
@@ -493,6 +516,22 @@
   min-width: 0;
 }
 
+.service-routine-card-copy-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.service-routine-card-copy-simple h3 {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.service-routine-card-copy-simple p {
+  font-size: 14px;
+  color: #7c7b76;
+}
+
 .service-routine-card-copy p,
 .service-shared-goal-head p,
 .service-battle-settings-head p,
@@ -513,6 +552,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.service-routine-menu {
+  align-self: flex-start;
+}
+
+.service-note-field-inline {
+  padding-left: 40px;
 }
 
 .service-status-chip,
