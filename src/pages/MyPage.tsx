@@ -19,6 +19,34 @@ import { supabase } from '../supabaseClient';
 
 const LANGUAGE_OPTIONS: Locale[] = ['ko', 'en'];
 
+function GlobeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="service-inline-icon">
+      <path d="M12 4.75c4 0 7.25 3.25 7.25 7.25S16 19.25 12 19.25 4.75 16 4.75 12 8 4.75 12 4.75Z" />
+      <path d="M8.75 12h6.5" />
+      <path d="M12 4.9c1.35 1.62 2.1 4.07 2.1 7.1 0 3.03-.75 5.48-2.1 7.1-1.35-1.62-2.1-4.07-2.1-7.1 0-3.03.75-5.48 2.1-7.1Z" />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="service-inline-icon">
+      <path d="M10 7H7.75A1.75 1.75 0 0 0 6 8.75v6.5C6 16.22 6.78 17 7.75 17H10" />
+      <path d="m13 8 4 4-4 4" />
+      <path d="M9.5 12H17" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="service-inline-icon service-inline-icon-small">
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}
+
 export default function MyPage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [personalCheckins, setPersonalCheckins] = useState<RoutineLogRow[]>([]);
@@ -26,47 +54,40 @@ export default function MyPage() {
   const [routineCount, setRoutineCount] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const navigate = useNavigate();
   const { locale, setLocale, t } = useLanguage();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
 
   useEffect(() => {
     const loadProfile = async () => {
       const {
-        data: { user },
+        data: { user: currentUser },
       } = await supabase.auth.getUser();
 
-      if (!user) {
+      if (!currentUser) {
         navigate('/login');
         return;
       }
 
       try {
-        const ensuredProfile = await ensureProfile(user);
+        const ensuredProfile = await ensureProfile(currentUser);
         setProfile(ensuredProfile);
 
         const [routineResult, checkinsResult, sharedResult] = await Promise.allSettled([
-          supabase.from('routines').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          fetchRoutineLogsForUsers([user.id]),
-          supabase.from('shared_goal_checkins').select('goal_id, user_id, check_date').eq('user_id', user.id),
+          supabase.from('routines').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+          fetchRoutineLogsForUsers([currentUser.id]),
+          supabase.from('shared_goal_checkins').select('goal_id, user_id, check_date').eq('user_id', currentUser.id),
         ]);
 
         if (routineResult.status === 'fulfilled' && !routineResult.value.error) {
           setRoutineCount(routineResult.value.count ?? 0);
-        } else {
-          console.warn('MyPage optional routine count load failed:', routineResult);
         }
-
         if (checkinsResult.status === 'fulfilled') {
           setPersonalCheckins(checkinsResult.value);
-        } else {
-          console.warn('MyPage optional personal checkins load failed:', checkinsResult);
         }
-
         if (sharedResult.status === 'fulfilled' && !sharedResult.value.error) {
           setSharedCheckins((sharedResult.value.data as SharedGoalCheckinRow[]) ?? []);
-        } else {
-          console.warn('MyPage optional shared checkins load failed:', sharedResult);
         }
       } catch (loadError) {
         console.warn('MyPage load failed:', loadError);
@@ -83,15 +104,15 @@ export default function MyPage() {
   const streak = useMemo(() => calculateStreak(personalCheckins), [personalCheckins]);
   const authCopy = useMemo(() => getAuthCopy(locale), [locale]);
   const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('my.profileFallback') });
+  const currentLanguageLabel = locale === 'ko' ? '한국어' : 'English';
+  const email = user?.email ?? '';
 
   const handleLogout = async () => {
     const { error: signOutError } = await signOut();
-
     if (signOutError) {
       setError(authCopy.logoutError);
       return;
     }
-
     navigate('/login', { replace: true });
   };
 
@@ -105,69 +126,91 @@ export default function MyPage() {
 
   return (
     <div className="mobile-shell">
-      <div className="app-screen subpage-screen">
-        <header className="subpage-header">
-          <p className="section-eyebrow">{t('my.eyebrow')}</p>
-          <h1>{t('my.title')}</h1>
-          <p>{t('my.description')}</p>
+      <div className="app-screen service-screen">
+        <header className="service-simple-header">
+          <h1>{locale === 'ko' ? '마이페이지' : 'My page'}</h1>
         </header>
 
-        <main className="subpage-content">
-          {error && <p className="error home-error">{error}</p>}
+        <main className="service-page-content service-profile-page">
+          {error ? <p className="error home-error">{error}</p> : null}
 
-          <section className="stats-grid">
-            <article className="stat-card">
-              <span>{t('my.profileLabel')}</span>
-              <strong>{profileLabel}</strong>
-            </article>
-            <article className="stat-card">
-              <span>{t('my.totalCompletionsLabel')}</span>
-              <strong>{t('my.countTimes', { count: totalCompletions })}</strong>
-            </article>
-            <article className="stat-card">
-              <span>{t('my.streakLabel')}</span>
-              <strong>{t('my.countDays', { count: streak })}</strong>
-            </article>
-            <article className="stat-card">
-              <span>{t('my.routinesLabel')}</span>
-              <strong>{t('my.countItems', { count: routineCount })}</strong>
-            </article>
-          </section>
-
-          <section className="section-block">
-            <div className="section-header section-header-stack">
-              <div>
-                <h2>{t('my.languageTitle')}</h2>
-                <p className="section-description">{t('my.languageDescription')}</p>
+          <section className="service-card service-profile-card">
+            <div className="service-profile-top">
+              <div className="service-profile-avatar">{profileLabel.slice(0, 1)}</div>
+              <div className="service-profile-copy">
+                <div className="service-profile-name-row">
+                  <h2>{profileLabel}</h2>
+                  <span>✎</span>
+                </div>
+                <p>{email || 'minjun@example.com'}</p>
               </div>
             </div>
 
-            <div className="language-option-list">
-              {LANGUAGE_OPTIONS.map((option) => {
-                const selected = locale === option;
-                const label = option === 'ko' ? t('my.languageKo') : t('my.languageEn');
-
-                return (
-                  <button
-                    key={option}
-                    className={selected ? 'language-option language-option-active' : 'language-option'}
-                    type="button"
-                    onClick={() => setLocale(option)}
-                    aria-pressed={selected}
-                  >
-                    <div className="language-option-copy">
-                      <strong>{label}</strong>
-                    </div>
-                    <span className="language-option-check">{selected ? t('my.selected') : ''}</span>
-                  </button>
-                );
-              })}
+            <div className="service-profile-stats">
+              <article className="service-profile-stat">
+                <strong>{totalCompletions}</strong>
+                <span>{locale === 'ko' ? '총 완료' : 'Completed'}</span>
+              </article>
+              <article className="service-profile-stat">
+                <strong>{streak}</strong>
+                <span>{locale === 'ko' ? '연속' : 'Streak'}</span>
+              </article>
+              <article className="service-profile-stat">
+                <strong>{routineCount}</strong>
+                <span>{locale === 'ko' ? '루틴' : 'Routines'}</span>
+              </article>
             </div>
           </section>
 
-          <button className="secondary-button logout-button" type="button" onClick={handleLogout}>
-            {t('my.logout')}
-          </button>
+          <section className="service-settings-section">
+            <p className="service-settings-title">{locale === 'ko' ? '설정' : 'Settings'}</p>
+
+            <div className="service-card service-settings-card">
+              <button className="service-settings-row" type="button" onClick={() => setLanguageOpen((current) => !current)}>
+                <span className="service-settings-row-copy">
+                  <GlobeIcon />
+                  <strong>{locale === 'ko' ? '언어' : 'Language'}</strong>
+                </span>
+                <span className="service-settings-row-value">
+                  {currentLanguageLabel}
+                  <ChevronIcon />
+                </span>
+              </button>
+
+              {languageOpen ? (
+                <div className="service-language-picker">
+                  {LANGUAGE_OPTIONS.map((option) => {
+                    const selected = locale === option;
+                    const label = option === 'ko' ? '한국어' : 'English';
+
+                    return (
+                      <button
+                        key={option}
+                        className={selected ? 'service-language-option service-language-option-active' : 'service-language-option'}
+                        type="button"
+                        onClick={() => setLocale(option)}
+                      >
+                        <span>{label}</span>
+                        <strong>{selected ? '✓' : ''}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              <button className="service-settings-row" type="button" onClick={handleLogout}>
+                <span className="service-settings-row-copy">
+                  <LogoutIcon />
+                  <strong>{locale === 'ko' ? '로그아웃' : 'Log out'}</strong>
+                </span>
+                <span className="service-settings-row-value">
+                  <ChevronIcon />
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <p className="service-version-text">{locale === 'ko' ? '루틴 배틀' : 'Routine Battle'} v1.0.0</p>
         </main>
 
         <BottomTabBar />

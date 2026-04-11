@@ -1,0 +1,831 @@
+.service-screen {
+  background: #f6f5f1;
+  color: #111111;
+}
+
+.service-page-content,
+.service-home-content,
+.service-profile-page,
+.service-friends-page,
+.service-records-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 18px 108px;
+}
+
+.service-simple-header,
+.service-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 18px 12px;
+}
+
+.service-simple-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.service-simple-header h1,
+.service-page-header h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+.service-simple-header p,
+.service-page-header p,
+.service-page-header-copy p {
+  margin: 0;
+  color: #8f8f8a;
+}
+
+.service-page-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.service-page-date {
+  font-size: 14px;
+  font-weight: 600;
+  color: #7f7f79;
+}
+
+.service-icon-button,
+.service-circle-button,
+.service-ghost-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dedbd3;
+  background: #ffffff;
+  color: #111111;
+}
+
+.service-icon-button,
+.service-circle-button {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+}
+
+.service-ghost-icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #f3f2ee;
+}
+
+.service-card,
+.service-empty-card,
+.service-invite-card,
+.service-profile-card,
+.service-friend-profile-card,
+.service-battle-settings-card,
+.service-record-summary-card,
+.service-week-card,
+.service-record-history-card,
+.service-routine-stat-card,
+.service-growth-card {
+  border: 1px solid #ddd8d0;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(17, 17, 17, 0.04);
+}
+
+.service-card,
+.service-empty-card,
+.service-invite-card,
+.service-profile-card,
+.service-friend-profile-card,
+.service-battle-settings-card,
+.service-growth-card,
+.service-week-card,
+.service-record-history-card,
+.service-routine-stat-card {
+  padding: 18px;
+}
+
+.service-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.service-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-section-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.service-section-copy h2,
+.service-card h2,
+.service-card h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.service-section-action,
+.service-text-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #7c7b76;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.service-inline-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.service-inline-icon-small {
+  width: 14px;
+  height: 14px;
+}
+
+.service-progress-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ecebe7;
+}
+
+.service-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.service-progress-fill-dark {
+  background: #111111;
+}
+
+.service-progress-fill-muted {
+  background: #c7c5bf;
+}
+
+.service-progress-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.service-progress-ring svg {
+  transform: rotate(-92deg);
+}
+
+.service-progress-ring-track,
+.service-progress-ring-value {
+  stroke-linecap: round;
+}
+
+.service-progress-ring-track {
+  stroke: #ecebe7;
+}
+
+.service-progress-ring-value {
+  stroke: #111111;
+}
+
+.service-progress-ring-label {
+  position: absolute;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.service-tab-bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  width: min(100%, 390px);
+  margin: 0 auto;
+  padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  border-top: 1px solid #e2ddd5;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px);
+}
+
+.service-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #8a8882;
+  text-decoration: none;
+}
+
+.service-tab-item-active {
+  color: #111111;
+}
+
+.service-tab-item-icon {
+  display: inline-flex;
+}
+
+.service-tab-icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.service-tab-item-label {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.service-home-progress-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.service-home-progress-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.service-home-progress-copy strong {
+  font-size: 24px;
+}
+
+.service-home-streak-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-flame-dot,
+.service-home-battle-badges i,
+.service-shared-goal-icon,
+.service-growth-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.service-flame-dot {
+  width: 22px;
+  height: 22px;
+  background: #f3f2ee;
+}
+
+.service-home-progress-bubble {
+  position: absolute;
+  top: -22px;
+  right: -18px;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.03);
+}
+
+.service-home-battle-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #111111;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.service-home-battle-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.service-home-battle-copy strong,
+.service-home-battle-copy p {
+  margin: 0;
+}
+
+.service-home-battle-copy p {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13px;
+}
+
+.service-home-battle-badges {
+  display: inline-flex;
+}
+
+.service-home-battle-badges i {
+  width: 22px;
+  height: 22px;
+  font-style: normal;
+  background: #ffffff;
+  color: #111111;
+}
+
+.service-home-battle-badges i + i {
+  margin-left: -6px;
+}
+
+.service-home-battle-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.service-home-battle-score span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.service-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service-week-pill,
+.service-week-card-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-week-pill {
+  padding: 10px 0;
+  border: 1px solid #ddd8d0;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.service-week-pill-active {
+  background: #111111;
+  color: #ffffff;
+  border-color: #111111;
+}
+
+.service-week-pill span,
+.service-week-pill small {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.service-week-pill-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #f0efeb;
+}
+
+.service-week-pill-active .service-week-pill-mark {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.service-routine-groups,
+.service-routine-group,
+.service-routine-list,
+.service-shared-goal-list,
+.service-record-list,
+.service-record-history-list,
+.service-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.service-group-label-row,
+.service-routine-card-main,
+.service-routine-card-head,
+.service-routine-title-line,
+.service-progress-label-row,
+.service-profile-top,
+.service-friend-profile-top,
+.service-battle-settings-head,
+.service-routine-stat-head,
+.service-record-history-head,
+.service-feed-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-group-label-row h3,
+.service-routine-title-line h3,
+.service-battle-goal-head h3,
+.service-profile-copy h2,
+.service-friend-copy h2,
+.service-battle-settings-head h2,
+.service-routine-stat-head strong,
+.service-record-history-head strong {
+  margin: 0;
+}
+
+.service-routine-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+
+.service-check-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d5d2cb;
+  border-radius: 999px;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.service-check-button-active {
+  background: #111111;
+  border-color: #111111;
+  color: #ffffff;
+}
+
+.service-routine-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.service-routine-card-copy p,
+.service-shared-goal-head p,
+.service-battle-settings-head p,
+.service-record-history-card p,
+.service-feed-card p,
+.service-card p {
+  margin: 0;
+  color: #8b8983;
+}
+
+.service-routine-card-meta,
+.service-routine-actions,
+.service-chip-row,
+.service-inline-button-row,
+.service-profile-stats,
+.service-friend-stat-grid,
+.service-battle-goal-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.service-status-chip,
+.service-meta-chip,
+.service-action-chip,
+.service-history-chip,
+.service-inline-pill-button,
+.service-point-pill,
+.service-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.service-status-chip,
+.service-meta-chip,
+.service-action-chip,
+.service-history-chip,
+.service-inline-pill-button {
+  border: 1px solid #e3dfd8;
+  background: #f5f4f0;
+  color: #54534f;
+}
+
+.service-status-chip-done,
+.service-action-chip-active,
+.service-inline-pill-button-dark,
+.service-tag {
+  background: #111111;
+  border-color: #111111;
+  color: #ffffff;
+}
+
+.service-status-chip-partial {
+  background: #ecebe7;
+}
+
+.service-status-chip-rest {
+  background: #f1efe9;
+}
+
+.service-note-field input,
+.service-form-stack input,
+.service-form-stack textarea,
+.field-group input,
+.field-group textarea {
+  width: 100%;
+  border: 1px solid #dedad2;
+  border-radius: 16px;
+  background: #fbfaf7;
+  padding: 13px 14px;
+  font: inherit;
+}
+
+.service-form-stack,
+.service-settings-section,
+.service-language-picker,
+.service-battle-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.service-shared-goal-head,
+.service-battle-goal-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.service-shared-goal-icon,
+.service-growth-icon {
+  width: 34px;
+  height: 34px;
+  background: #f2f1ed;
+  color: #5b5954;
+  flex-shrink: 0;
+}
+
+.service-profile-avatar,
+.service-friend-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background: #f0efeb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.service-profile-copy,
+.service-friend-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.service-profile-name-row,
+.service-settings-row,
+.service-settings-row-copy,
+.service-settings-row-value,
+.service-invite-code-row,
+.service-week-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-profile-stats,
+.service-friend-stat-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.service-profile-stat,
+.service-friend-stat-card {
+  padding: 14px 10px;
+  border-radius: 18px;
+  background: #f3f2ee;
+  text-align: center;
+}
+
+.service-profile-stat strong,
+.service-friend-stat-card strong,
+.service-record-summary-card strong {
+  display: block;
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 800;
+}
+
+.service-profile-stat span,
+.service-friend-stat-card span,
+.service-record-summary-card span,
+.service-version-text,
+.service-card-label,
+.service-settings-title {
+  color: #8a8882;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.service-settings-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.service-settings-row {
+  width: 100%;
+  padding: 18px;
+  border: 0;
+  background: transparent;
+}
+
+.service-settings-row + .service-settings-row {
+  border-top: 1px solid #ece7df;
+}
+
+.service-language-picker {
+  padding: 0 18px 18px;
+}
+
+.service-language-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e1ddd5;
+  border-radius: 14px;
+  background: #faf9f6;
+  padding: 12px 14px;
+}
+
+.service-language-option-active {
+  border-color: #111111;
+}
+
+.service-version-text {
+  text-align: center;
+  margin: 20px 0 0;
+}
+
+.service-record-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.service-record-summary-card {
+  padding: 18px 16px;
+}
+
+.service-growth-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.service-week-card {
+  padding: 14px 12px;
+}
+
+.service-week-card-row {
+  align-items: stretch;
+}
+
+.service-week-card-day {
+  flex: 1;
+  gap: 4px;
+}
+
+.service-week-day-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #ecebe7;
+  color: #4b4a46;
+}
+
+.service-week-day-count-done {
+  background: #111111;
+  color: #ffffff;
+}
+
+.service-friends-header p,
+.service-record-header p {
+  font-size: 15px;
+}
+
+.service-feed-card,
+.service-routine-stat-card,
+.service-record-history-card {
+  gap: 12px;
+}
+
+.service-battle-goal-card,
+.service-feed-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.battle-extra-section {
+  margin-top: 4px;
+}
+
+.service-point-pill {
+  background: #f1f0ec;
+  border: 0;
+}
+
+.service-invite-card strong,
+.service-invite-card p,
+.service-setting-pair strong,
+.service-setting-pair span {
+  margin: 0;
+}
+
+.service-invite-code-row strong {
+  flex: 1;
+  border-radius: 16px;
+  background: #f2f1ed;
+  padding: 14px 16px;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+}
+
+.service-friend-profile-top {
+  align-items: flex-start;
+}
+
+.service-friend-copy p {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.service-setting-pair {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 420px) {
+  .service-page-content,
+  .service-home-content,
+  .service-profile-page,
+  .service-friends-page,
+  .service-records-page {
+    padding-inline: 14px;
+  }
+
+  .service-page-header,
+  .service-simple-header {
+    padding-inline: 14px;
+  }
+
+  .service-home-battle-banner,
+  .service-home-progress-card {
+    padding: 14px;
+  }
+}

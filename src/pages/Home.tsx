@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomTabBar from '../components/BottomTabBar';
+import HomeDashboardContent from '../components/home/HomeDashboardContent';
 import RoutineEditorSheet from '../components/RoutineEditorSheet';
 import { useLanguage } from '../i18n/LanguageContext';
 import { formatOpponentLabel, formatSelfLabel, normalizeDisplayName } from '../lib/nameDisplay';
@@ -21,6 +22,7 @@ import {
   filterSharedGoalsForPair,
   formatRoutineSchedule,
   getFullWeekDateKeys,
+  getLastDateKeys,
   getTodayDayKey,
   getTodayKey,
   isPositiveRoutineStatus,
@@ -148,6 +150,41 @@ function getWeekdayLabel(dateKey: string, locale: string) {
 
 function getDateNumberLabel(dateKey: string, locale: string) {
   return new Intl.DateTimeFormat(locale, { day: 'numeric' }).format(new Date(`${dateKey}T12:00:00`));
+}
+
+function getGreetingCopy(isKo: boolean) {
+  const hour = new Date().getHours();
+
+  if (isKo) {
+    if (hour < 12) {
+      return '좋은 아침이에요';
+    }
+
+    if (hour < 18) {
+      return '좋은 오후예요';
+    }
+
+    return '좋은 저녁이에요';
+  }
+
+  if (hour < 12) {
+    return 'Good morning';
+  }
+
+  if (hour < 18) {
+    return 'Good afternoon';
+  }
+
+  return 'Good evening';
+}
+
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="service-inline-icon">
+      <path d="M12 8.75A3.25 3.25 0 1 0 12 15.25A3.25 3.25 0 1 0 12 8.75Z" />
+      <path d="M5.95 7.58 4.5 10l1.45 2.42 2.73.37 1.22 2.37 2.6.23 1.95-1.74 2.56.69 1.8-1.87-.64-2.63 1.59-2.12L18.85 5l-2.72.32-2-1.66-2.58.3-1.15 2.35-2.45.27Z" />
+    </svg>
+  );
 }
 
 export default function Home() {
@@ -775,6 +812,38 @@ export default function Home() {
     setPendingAction('');
   };
 
+  const greetingCopy = getGreetingCopy(isKo);
+  const completionRate = personalGoals.length === 0 ? 0 : Math.round((completedCount / personalGoals.length) * 100);
+  const sharedProgressKeys = useMemo(() => getLastDateKeys(7), []);
+  const sharedGoalCards = useMemo(() => {
+    if (!friendProfile) {
+      return [];
+    }
+
+    return sharedGoalViews.map((goal) => {
+      const myCount = sharedGoalCheckins.filter(
+        (checkin) =>
+          checkin.goal_id === goal.id &&
+          checkin.user_id === userId &&
+          sharedProgressKeys.includes(checkin.check_date)
+      ).length;
+      const friendCount = sharedGoalCheckins.filter(
+        (checkin) =>
+          checkin.goal_id === goal.id &&
+          checkin.user_id === friendProfile.id &&
+          sharedProgressKeys.includes(checkin.check_date)
+      ).length;
+
+      return {
+        ...goal,
+        myCount,
+        friendCount,
+        myPercent: Math.round((myCount / sharedProgressKeys.length) * 100),
+        friendPercent: Math.round((friendCount / sharedProgressKeys.length) * 100),
+      };
+    });
+  }, [friendProfile, sharedGoalCheckins, sharedGoalViews, sharedProgressKeys, userId]);
+
   if (loading) {
     return (
       <div className="mobile-shell">
@@ -788,6 +857,67 @@ export default function Home() {
       </div>
     );
   }
+
+  return (
+    <div className="mobile-shell">
+      <div className="app-screen home-screen service-screen">
+        <HomeDashboardContent
+          isKo={isKo}
+          todayLabel={todayLabel}
+          greetingCopy={greetingCopy}
+          profileLabel={profileLabel}
+          friendLabel={friendLabel}
+          battleTeaserHref={battleTeaserHref}
+          battleTeaserTitle={battleTeaserTitle}
+          battleTeaserBody={battleTeaserBody}
+          completedCount={completedCount}
+          totalCount={personalGoals.length}
+          streak={streak}
+          completionRate={completionRate}
+          friendProfileExists={Boolean(friendProfile)}
+          myTodayCompletedCount={myTodayCompletedCount}
+          friendTodayCompletedCount={friendTodayCompletedCount}
+          todayKey={todayKey}
+          myPageAriaLabel={t('home.myPageAria')}
+          groupedGoals={groupedGoals}
+          weekDaily={weekStats.daily}
+          sharedGoalCards={sharedGoalCards}
+          statusLabels={statusLabels}
+          screenLocale={screenLocale}
+          pendingAction={pendingAction}
+          noteDrafts={noteDrafts}
+          expandedNotes={expandedNotes}
+          routineFeedback={routineFeedback}
+          routineStreakMap={routineStreakMap}
+          onOpenCreateSheet={openCreateSheet}
+          onOpenEditSheet={openEditSheet}
+          onCyclePriority={handleCyclePriority}
+          onSetRoutineStatus={handleSetRoutineStatus}
+          onDeleteRoutine={handleDeleteRoutine}
+          onToggleNote={toggleNote}
+          onNoteDraftChange={(routineId, value) => setNoteDrafts((current) => ({ ...current, [routineId]: value }))}
+          onNoteBlur={handleNoteBlur}
+          getRoutineFeedbackLabel={getRoutineFeedbackLabel}
+        />
+
+        <button className="fab-button fab-button-extended" type="button" onClick={openCreateSheet} aria-label={isKo ? '루틴 추가하기' : 'Add routine'}>
+          + {isKo ? '루틴 추가' : 'Add routine'}
+        </button>
+
+        {toast && (
+          <div className="home-toast" role="status" aria-live="polite">
+            {toast.message}
+          </div>
+        )}
+
+        {routineSheetOpen && (
+          <RoutineEditorSheet initialRoutine={editingRoutine} onClose={() => setRoutineSheetOpen(false)} onSaved={handleRoutineSaved} />
+        )}
+
+        <BottomTabBar />
+      </div>
+    </div>
+  );
 
   return (
     <div className="mobile-shell">

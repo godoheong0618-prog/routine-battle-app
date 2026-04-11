@@ -5,6 +5,7 @@ import App from './App';
 import { AuthProvider } from './components/AuthProvider';
 import { LanguageProvider } from './i18n/LanguageContext';
 import './index.css';
+import './service-ui.css';
 
 // This is the entry point of the React application. It renders the App component
 // inside the root div. BrowserRouter provides client‑side routing.
