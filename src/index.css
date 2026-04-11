@@ -4912,3 +4912,629 @@ body {
   background: linear-gradient(180deg, #111827 0%, #152033 100%);
   color: #ffffff;
 }
+
+/* Dashboard refresh */
+.progress-fill {
+  background: linear-gradient(90deg, #262626 0%, #4b5563 100%);
+}
+
+.dashboard-top-card {
+  padding: 28px 22px 14px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.dashboard-header-row,
+.dashboard-summary-grid,
+.dashboard-panel-header,
+.dashboard-period-header,
+.dashboard-routine-head,
+.dashboard-routine-title-row,
+.dashboard-routine-meta,
+.dashboard-shared-status-row,
+.dashboard-shared-stats,
+.dashboard-friend-grid,
+.dashboard-week-stats,
+.battle-hero-topbar,
+.battle-versus-grid,
+.battle-hero-stats,
+.battle-today-grid,
+.battle-routine-compare,
+.battle-goal-players,
+.battle-flow-values,
+.record-panel-header,
+.record-overview-stats,
+.record-routine-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-title,
+.battle-dashboard-header h1,
+.record-header-card h1 {
+  margin-top: 8px;
+  font-size: 30px;
+  line-height: 1.08;
+  letter-spacing: -0.06em;
+  color: #111827;
+}
+
+.dashboard-subtitle,
+.dashboard-panel-description,
+.dashboard-summary-copy,
+.dashboard-shared-copy p,
+.dashboard-friend-note,
+.battle-hero-topbar p,
+.battle-hero-message p,
+.battle-support-copy,
+.battle-routine-copy p,
+.battle-shared-goal-card p,
+.battle-feed-row p,
+.record-overview-copy,
+.record-day-row p,
+.record-routine-row p {
+  color: #6b7280;
+  line-height: 1.55;
+}
+
+.dashboard-summary-grid,
+.record-summary-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-summary-card,
+.dashboard-panel,
+.dashboard-shared-overview,
+.dashboard-friend-card,
+.battle-hero-card,
+.battle-section-card,
+.record-summary-card,
+.record-overview-card,
+.record-panel {
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.dashboard-summary-card,
+.record-summary-card {
+  padding: 18px;
+}
+
+.dashboard-summary-card-large {
+  grid-column: 1 / -1;
+}
+
+.dashboard-summary-label,
+.dashboard-panel-kicker,
+.dashboard-friend-label,
+.dashboard-week-label,
+.battle-hero-kicker,
+.battle-section-kicker,
+.record-panel-kicker,
+.record-overview-label,
+.record-summary-card span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.01em;
+}
+
+.dashboard-summary-value,
+.dashboard-friend-value,
+.dashboard-week-value,
+.record-summary-card strong {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 40px;
+  line-height: 0.95;
+  letter-spacing: -0.07em;
+  color: #111827;
+}
+
+.dashboard-summary-value em,
+.dashboard-friend-value em,
+.dashboard-week-value em,
+.record-summary-card em {
+  font-style: normal;
+  font-size: 16px;
+  color: #9ca3af;
+}
+
+.dashboard-home-content,
+.record-page-content,
+.battle-dashboard-content {
+  padding-top: 18px;
+}
+
+.dashboard-panel,
+.battle-section-card,
+.record-panel,
+.record-overview-card {
+  margin-top: 18px;
+  padding: 20px;
+}
+
+.dashboard-inline-link,
+.dashboard-friend-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-period-list,
+.dashboard-routine-list,
+.dashboard-shared-list,
+.record-day-list,
+.record-routine-list,
+.battle-routine-list,
+.battle-flow-list,
+.battle-feed-list {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-period-group {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-period-header h3,
+.dashboard-routine-title-row h3,
+.dashboard-shared-card h3,
+.dashboard-shared-copy h3,
+.dashboard-panel h2,
+.battle-section-card h2,
+.record-panel h2,
+.record-overview-card h2 {
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+
+.dashboard-period-badge {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-routine-card {
+  position: relative;
+  padding: 18px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+}
+
+.dashboard-routine-card-done {
+  background: #f9fafb;
+}
+
+.dashboard-routine-grid {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.dashboard-check-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+}
+
+.dashboard-check-button-active {
+  background: #111827;
+  border-color: #111827;
+}
+
+.dashboard-check-glyph {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.dashboard-routine-main,
+.dashboard-shared-copy,
+.record-seven-cell,
+.record-routine-row,
+.battle-versus-card,
+.battle-hero-stat,
+.battle-today-card,
+.battle-routine-side,
+.battle-goal-player {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-routine-time,
+.dashboard-meta-chip,
+.dashboard-status-badge,
+.dashboard-tag,
+.dashboard-action-chip,
+.dashboard-shared-pill,
+.battle-points-pill,
+.record-day-metrics small {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-tag,
+.dashboard-meta-chip,
+.dashboard-status-badge,
+.dashboard-shared-pill,
+.dashboard-action-chip {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #f9fafb;
+  color: #4b5563;
+}
+
+.dashboard-tag-battle,
+.dashboard-action-chip-active,
+.dashboard-shared-pill-active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.dashboard-status-badge-done {
+  background: #111827;
+  color: #ffffff;
+}
+
+.dashboard-status-badge-partial,
+.dashboard-status-badge-rest,
+.dashboard-status-badge-pending {
+  background: #f3f4f6;
+}
+
+.dashboard-routine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboard-note-field input {
+  min-height: 42px;
+  border-radius: 16px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #f9fafb;
+  padding: 0 14px;
+}
+
+.dashboard-routine-feedback {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.dashboard-shared-overview,
+.dashboard-friend-card-wide {
+  padding: 18px;
+}
+
+.dashboard-shared-stats,
+.dashboard-friend-grid,
+.dashboard-week-stats,
+.battle-today-grid,
+.record-overview-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-shared-stat,
+.dashboard-week-stat,
+.record-overview-stats span,
+.battle-hero-stat,
+.battle-goal-player,
+.battle-routine-side,
+.record-seven-cell,
+.record-day-row,
+.record-routine-row,
+.battle-flow-row,
+.battle-feed-row {
+  padding: 14px;
+  border-radius: 20px;
+  background: #f9fafb;
+  border: 1px solid rgba(17, 24, 39, 0.05);
+}
+
+.dashboard-week-row,
+.record-seven-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dashboard-week-day,
+.record-seven-cell {
+  justify-items: center;
+}
+
+.dashboard-week-daylabel,
+.dashboard-week-date,
+.record-seven-cell span,
+.record-seven-cell small {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.dashboard-week-cell,
+.record-seven-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #ffffff;
+  color: #9ca3af;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.dashboard-week-cell-done,
+.record-seven-mark-done {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.dashboard-week-cell-partial,
+.record-seven-mark-partial,
+.dashboard-week-cell-rest,
+.record-seven-mark-rest,
+.dashboard-week-cell-missed,
+.record-seven-mark-missed,
+.dashboard-week-cell-off,
+.record-seven-mark-off {
+  background: #f3f4f6;
+}
+
+.battle-dashboard-header,
+.record-header-card {
+  border-bottom: 0;
+  background: transparent;
+}
+
+.battle-hero-card {
+  padding: 22px;
+}
+
+.battle-versus-card strong,
+.battle-hero-stat strong,
+.battle-today-card strong,
+.record-summary-card strong,
+.record-routine-head strong {
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: #111827;
+}
+
+.battle-versus-divider {
+  min-width: 44px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.battle-hero-message,
+.record-overview-card {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 22px;
+  background: #f3f4f6;
+}
+
+.battle-routine-row,
+.battle-shared-goal-card {
+  padding: 18px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+}
+
+.battle-routine-copy,
+.battle-shared-goal-head,
+.battle-goal-player,
+.record-day-row div,
+.battle-flow-row div,
+.battle-feed-row div {
+  display: grid;
+  gap: 6px;
+}
+
+.battle-routine-compare,
+.battle-goal-players,
+.battle-feed-row,
+.battle-flow-row,
+.record-day-row,
+.record-routine-head {
+  align-items: stretch;
+}
+
+.battle-goal-player-active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.battle-goal-player-active span,
+.battle-goal-player-active strong {
+  color: #ffffff;
+}
+
+.battle-goal-status-copy,
+.battle-goal-stake,
+.record-day-row p,
+.battle-flow-row p,
+.battle-feed-row p {
+  margin-top: 8px;
+}
+
+.battle-flow-values,
+.record-day-metrics {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+
+.record-summary-card-dark {
+  background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
+}
+
+.record-summary-card-dark span,
+.record-summary-card-dark strong,
+.record-summary-card-dark em {
+  color: #ffffff;
+}
+
+.record-routine-track {
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.record-routine-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #111827 0%, #4b5563 100%);
+}
+
+.tab-bar {
+  background: rgba(249, 250, 251, 0.96);
+}
+
+@media (max-width: 560px) {
+  .dashboard-summary-grid,
+  .dashboard-shared-stats,
+  .dashboard-friend-grid,
+  .dashboard-week-stats,
+  .battle-today-grid,
+  .battle-hero-stats,
+  .record-summary-grid,
+  .record-overview-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-week-row,
+  .record-seven-grid {
+    gap: 6px;
+  }
+
+  .dashboard-week-cell,
+  .record-seven-mark {
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+  }
+
+  .battle-versus-grid,
+  .battle-routine-compare,
+  .battle-goal-players,
+  .battle-flow-values {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .battle-feed-row,
+  .battle-flow-row,
+  .record-day-row,
+  .record-routine-head {
+    flex-direction: column;
+  }
+
+  .dashboard-title,
+  .battle-dashboard-header h1,
+  .record-header-card h1 {
+    font-size: 26px;
+  }
+}
+
+.dashboard-header-copy {
+  min-width: 0;
+}
+
+.dashboard-profile-shortcut {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.battle-section-header,
+.record-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.battle-routine-row,
+.battle-shared-list-modern,
+.record-routine-list {
+  display: grid;
+  gap: 12px;
+}
+
+.record-day-row,
+.battle-flow-row,
+.battle-feed-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.battle-feed-row span,
+.battle-flow-row span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+}

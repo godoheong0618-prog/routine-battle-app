@@ -1,19 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import BottomTabBar from '../components/BottomTabBar';
 import { useLanguage } from '../i18n/LanguageContext';
-import { formatOpponentLabel, formatSelfLabel } from '../lib/nameDisplay';
 import {
-  ProfileRow,
   RoutineLogRow,
   RoutineRow,
   calculateRoutineStats,
   calculateStreak,
-  ensureProfile,
-  fetchFriendConnection,
   fetchRoutineLogsForUsers,
-  getFullWeekDateKeys,
   getLastDateKeys,
   isPositiveRoutineStatus,
+  isRoutineVisibleToday,
 } from '../lib/mvp';
 import { supabase } from '../supabaseClient';
 
@@ -57,10 +53,36 @@ function getPreviousWindowEnd(days: number) {
   return date;
 }
 
+function getDateLabel(dateKey: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(new Date(`${dateKey}T12:00:00`));
+}
+
+function getDayStatusText(status: string, isKo: boolean) {
+  if (status === 'done') {
+    return isKo ? '완료' : 'Done';
+  }
+
+  if (status === 'partial') {
+    return isKo ? '부분 완료' : 'Partial';
+  }
+
+  if (status === 'rest') {
+    return isKo ? '휴식' : 'Rest';
+  }
+
+  if (status === 'off') {
+    return isKo ? '예정 없음' : 'Off';
+  }
+
+  return isKo ? '놓침' : 'Missed';
+}
+
 export default function Stats() {
   const [userId, setUserId] = useState('');
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [friendProfile, setFriendProfile] = useState<ProfileRow | null>(null);
   const [routines, setRoutines] = useState<RoutineRow[]>([]);
   const [routineLogs, setRoutineLogs] = useState<RoutineLogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,29 +105,23 @@ export default function Stats() {
       }
 
       try {
-        const ensuredProfile = await ensureProfile(user);
-        const connection = await fetchFriendConnection(ensuredProfile);
-        const relatedUserIds = connection.friendProfile ? [user.id, connection.friendProfile.id] : [user.id];
-
-        const { data, error: routinesError } = await supabase.from('routines').select('*').in('user_id', relatedUserIds);
+        const { data, error: routinesError } = await supabase.from('routines').select('*').eq('user_id', user.id);
 
         if (routinesError) {
           throw routinesError;
         }
 
-        const logs = await fetchRoutineLogsForUsers(relatedUserIds);
+        const logs = await fetchRoutineLogsForUsers([user.id]);
 
         if (active) {
           setUserId(user.id);
-          setProfile(connection.profile);
-          setFriendProfile(connection.friendProfile);
           setRoutines(((data as RoutineRow[]) ?? []).filter((routine) => !routine.is_template));
-          setRoutineLogs(logs);
+          setRoutineLogs(logs.filter((log) => log.user_id === user.id));
         }
       } catch (loadError) {
         console.warn('Stats load failed:', loadError);
         if (active) {
-          setError(isKo ? '통계를 불러오지 못했어요.' : 'Could not load stats.');
+          setError(isKo ? '기록을 불러오지 못했어요.' : 'Could not load your records.');
         }
       } finally {
         if (active) {
@@ -121,42 +137,41 @@ export default function Stats() {
     };
   }, [isKo]);
 
-  const myRoutines = useMemo(() => routines.filter((routine) => routine.user_id === userId), [routines, userId]);
-  const friendRoutines = useMemo(
-    () => routines.filter((routine) => routine.user_id === friendProfile?.id),
-    [friendProfile?.id, routines]
-  );
-  const myLogs = useMemo(() => routineLogs.filter((log) => log.user_id === userId), [routineLogs, userId]);
-  const profileLabel = formatSelfLabel(profile?.nickname, { locale, fallback: t('common.me') });
-  const friendLabel = formatOpponentLabel(friendProfile?.nickname, { locale });
-
-  const weekStats = useMemo(
-    () => calculateRoutineStats(myRoutines, routineLogs, userId, getFullWeekDateKeys()),
-    [myRoutines, routineLogs, userId]
-  );
-  const sevenDayStats = useMemo(
-    () => calculateRoutineStats(myRoutines, routineLogs, userId, getLastDateKeys(7)),
-    [myRoutines, routineLogs, userId]
-  );
-  const monthStats = useMemo(
-    () => calculateRoutineStats(myRoutines, routineLogs, userId, getLastDateKeys(30)),
-    [myRoutines, routineLogs, userId]
-  );
-  const previousMonthStats = useMemo(
-    () => calculateRoutineStats(myRoutines, routineLogs, userId, getLastDateKeys(30, getPreviousWindowEnd(30))),
-    [myRoutines, routineLogs, userId]
-  );
-  const friendWeekStats = useMemo(
-    () =>
-      friendProfile
-        ? calculateRoutineStats(friendRoutines, routineLogs, friendProfile.id, getFullWeekDateKeys())
-        : null,
-    [friendProfile, friendRoutines, routineLogs]
-  );
-  const streak = useMemo(() => calculateStreak(myLogs), [myLogs]);
-  const bestStreak = useMemo(() => getBestStreak(myLogs), [myLogs]);
+  const sevenDayKeys = useMemo(() => getLastDateKeys(7), []);
+  const monthKeys = useMemo(() => getLastDateKeys(30), []);
+  const streak = useMemo(() => calculateStreak(routineLogs), [routineLogs]);
+  const bestStreak = useMemo(() => getBestStreak(routineLogs), [routineLogs]);
+  const sevenDayStats = useMemo(() => calculateRoutineStats(routines, routineLogs, userId, sevenDayKeys), [routines, routineLogs, sevenDayKeys, userId]);
+  const monthStats = useMemo(() => calculateRoutineStats(routines, routineLogs, userId, monthKeys), [routines, routineLogs, monthKeys, userId]);
+  const previousMonthStats = useMemo(() => calculateRoutineStats(routines, routineLogs, userId, getLastDateKeys(30, getPreviousWindowEnd(30))), [routines, routineLogs, userId]);
   const monthDelta = monthStats.percent - previousMonthStats.percent;
-  const friendPercent = friendWeekStats?.percent ?? 0;
+  const totalCompletedCount = useMemo(() => routineLogs.filter((log) => isPositiveRoutineStatus(log.status)).length, [routineLogs]);
+
+  const routineRecords = useMemo(() => {
+    return routines
+      .map((routine) => {
+        const scheduledKeys = monthKeys.filter((dateKey) => isRoutineVisibleToday(routine, (() => {
+          const day = new Date(`${dateKey}T12:00:00`).getDay();
+          return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][day] as any;
+        })()));
+        const completed = routineLogs.filter(
+          (log) =>
+            log.routine_id === routine.id &&
+            monthKeys.includes(log.log_date) &&
+            isPositiveRoutineStatus(log.status)
+        ).length;
+        const total = scheduledKeys.length;
+
+        return {
+          id: routine.id,
+          title: routine.title,
+          completed,
+          total,
+          percent: total === 0 ? 0 : Math.round((completed / total) * 100),
+        };
+      })
+      .sort((first, second) => second.percent - first.percent || second.completed - first.completed || first.title.localeCompare(second.title));
+  }, [monthKeys, routineLogs, routines]);
 
   if (loading) {
     return (
@@ -169,100 +184,118 @@ export default function Stats() {
   return (
     <div className="mobile-shell">
       <div className="app-screen subpage-screen stats-screen">
-        <header className="subpage-header stats-page-header">
-          <p className="section-eyebrow">{isKo ? '기록 및 통계' : 'Records & stats'}</p>
+        <header className="subpage-header stats-page-header record-header-card">
+          <p className="section-eyebrow">{isKo ? '기록' : 'Records'}</p>
           <h1>{isKo ? '기록 및 통계' : 'Records & stats'}</h1>
-          <p>{isKo ? '꾸준히 쌓아가고 있는 나의 성장 기록' : 'A calm snapshot of the consistency you are building.'}</p>
+          <p>{isKo ? '숫자와 날짜 중심으로 지난 흐름을 정리했어요.' : 'A clean view of your consistency, dates, and routine totals.'}</p>
         </header>
 
-        <main className="subpage-content stats-content polished-stats-content">
+        <main className="subpage-content record-page-content">
           {error && <p className="error home-error">{error}</p>}
 
-          <section className="stats-kpi-grid">
-            <article className="stats-kpi-card">
-              <span>{isKo ? '현재 연속' : 'Current streak'}</span>
-              <strong>
-                {streak}
-                <em>{isKo ? '일' : 'd'}</em>
-              </strong>
+          <section className="record-summary-grid">
+            <article className="record-summary-card">
+              <span>{isKo ? '현재 연속 달성' : 'Current streak'}</span>
+              <strong>{streak}<em>{isKo ? '일' : 'd'}</em></strong>
             </article>
-
-            <article className="stats-kpi-card">
-              <span>{isKo ? '최고 기록' : 'Best record'}</span>
-              <strong>
-                {bestStreak}
-                <em>{isKo ? '일' : 'd'}</em>
-              </strong>
+            <article className="record-summary-card">
+              <span>{isKo ? '최고 연속 달성' : 'Best streak'}</span>
+              <strong>{bestStreak}<em>{isKo ? '일' : 'd'}</em></strong>
+            </article>
+            <article className="record-summary-card record-summary-card-dark">
+              <span>{isKo ? '최근 30일 완료율' : '30-day completion rate'}</span>
+              <strong>{monthStats.percent}<em>%</em></strong>
+            </article>
+            <article className="record-summary-card">
+              <span>{isKo ? '총 완료 수' : 'Total completed'}</span>
+              <strong>{totalCompletedCount}<em>{isKo ? '회' : ''}</em></strong>
             </article>
           </section>
 
-          <section className="stats-feature-card">
-            <div className="stats-feature-top">
-              <div>
-                <span>{isKo ? '평균 완료율' : 'Average completion'}</span>
-                <strong>
-                  {monthStats.percent}
-                  <em>%</em>
-                </strong>
-              </div>
-              <span className="page-chip">{isKo ? '최근 30일' : 'Last 30 days'}</span>
+          <section className="record-overview-card">
+            <div>
+              <p className="record-overview-label">{isKo ? '성장 메모' : 'Growth note'}</p>
+              <h2>{isKo ? '최근 30일 흐름' : 'Last 30 days'}</h2>
             </div>
-
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${monthStats.percent}%` }} />
-            </div>
-
-            <p className="stats-feature-note">
+            <p className="record-overview-copy">
               {monthDelta >= 0
                 ? isKo
-                  ? `지난 기간보다 ${monthDelta}% 올랐어요.`
-                  : `Up ${monthDelta}% from the previous window.`
+                  ? `이전 30일보다 ${monthDelta}% 좋아졌어요.`
+                  : `Up ${monthDelta}% compared with the previous 30 days.`
                 : isKo
-                  ? `지난 기간보다 ${Math.abs(monthDelta)}% 낮아요.`
-                  : `${Math.abs(monthDelta)}% lower than the previous window.`}
+                  ? `이전 30일보다 ${Math.abs(monthDelta)}% 낮아요.`
+                  : `${Math.abs(monthDelta)}% lower than the previous 30 days.`}
             </p>
+            <div className="record-overview-stats">
+              <span>{isKo ? `완료 ${monthStats.doneCount}회` : `${monthStats.doneCount} done`}</span>
+              <span>{isKo ? `부분 완료 ${monthStats.partialCount}회` : `${monthStats.partialCount} partial`}</span>
+              <span>{isKo ? `놓친 루틴 ${monthStats.missedCount}회` : `${monthStats.missedCount} missed`}</span>
+            </div>
           </section>
 
-          <section className="stats-week-card">
-            <div className="section-header section-header-stack">
+          <section className="record-panel">
+            <div className="record-panel-header">
               <div>
-                <h2>{isKo ? '최근 7일 완료 내역' : 'Last 7 days'}</h2>
-                <p className="section-description">
-                  {isKo ? '한눈에 흐름을 보도록 요일별로 정리했어요.' : 'A simple weekday flow of your recent rhythm.'}
-                </p>
+                <p className="record-panel-kicker">{isKo ? '최근 7일' : 'Last 7 days'}</p>
+                <h2>{isKo ? '날짜별 달성 상태' : 'Daily status'}</h2>
               </div>
             </div>
 
-            <div className="stats-week-row">
+            <div className="record-seven-grid">
               {sevenDayStats.daily.map((day) => (
-                <div key={day.dateKey} className="stats-week-day">
+                <article key={day.dateKey} className="record-seven-cell">
                   <span>{new Intl.DateTimeFormat(screenLocale, { weekday: 'short' }).format(new Date(`${day.dateKey}T12:00:00`))}</span>
-                  <strong className={`stats-week-dot stats-week-dot-${day.status}`}>{day.status === 'done' ? '✓' : ''}</strong>
-                </div>
+                  <strong className={`record-seven-mark record-seven-mark-${day.status}`}>{day.status === 'done' ? '✓' : day.status === 'partial' ? '◐' : day.status === 'rest' ? '−' : ''}</strong>
+                  <small>{new Intl.DateTimeFormat(screenLocale, { day: 'numeric' }).format(new Date(`${day.dateKey}T12:00:00`))}</small>
+                </article>
+              ))}
+            </div>
+
+            <div className="record-day-list">
+              {sevenDayStats.daily.map((day) => (
+                <article key={day.dateKey} className="record-day-row">
+                  <div>
+                    <strong>{getDateLabel(day.dateKey, screenLocale)}</strong>
+                    <p>{getDayStatusText(day.status, isKo)}</p>
+                  </div>
+                  <div className="record-day-metrics">
+                    <span>{day.percent}%</span>
+                    <small>{isKo ? `${day.total}개 예정` : `${day.total} scheduled`}</small>
+                  </div>
+                </article>
               ))}
             </div>
           </section>
 
-          <section className="stats-compare-card stats-compare-bars">
-            <article>
-              <div className="stats-compare-row">
-                <span>{profileLabel}</span>
-                <strong>{weekStats.percent}%</strong>
+          <section className="record-panel">
+            <div className="record-panel-header">
+              <div>
+                <p className="record-panel-kicker">{isKo ? '루틴별 기록' : 'By routine'}</p>
+                <h2>{isKo ? '최근 30일 누적 기록' : '30-day totals by routine'}</h2>
               </div>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${weekStats.percent}%` }} />
-              </div>
-            </article>
+            </div>
 
-            <article>
-              <div className="stats-compare-row">
-                <span>{friendProfile ? friendLabel : isKo ? '친구 없음' : 'No friend'}</span>
-                <strong>{friendWeekStats ? `${friendPercent}%` : '-'}</strong>
+            {routineRecords.length === 0 ? (
+              <article className="empty-state-card">
+                <h3>{isKo ? '아직 기록할 루틴이 없어요.' : 'No routine records yet.'}</h3>
+                <p>{isKo ? '홈에서 루틴을 만들고 체크하면 이곳에 누적 기록이 쌓여요.' : 'Create and check routines from Home to build up your records here.'}</p>
+              </article>
+            ) : (
+              <div className="record-routine-list">
+                {routineRecords.map((routine) => (
+                  <article key={routine.id} className="record-routine-row">
+                    <div className="record-routine-head">
+                      <strong>{routine.title}</strong>
+                      <span>{routine.completed}/{routine.total}</span>
+                    </div>
+                    <div className="record-routine-track">
+                      <div className="record-routine-fill" style={{ width: `${routine.percent}%` }} />
+                    </div>
+                    <p>{isKo ? `${routine.percent}% 달성` : `${routine.percent}% completed`}</p>
+                  </article>
+                ))}
               </div>
-              <div className="progress-track">
-                <div className="progress-fill progress-fill-muted" style={{ width: `${friendPercent}%` }} />
-              </div>
-            </article>
+            )}
           </section>
         </main>
 

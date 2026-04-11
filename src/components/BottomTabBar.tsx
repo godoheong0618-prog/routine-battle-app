@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+﻿import { NavLink } from 'react-router-dom';
 import { useLanguage } from '../i18n/LanguageContext';
 
 type TabIconProps = {
@@ -44,17 +44,13 @@ export default function BottomTabBar() {
   const tabs = [
     { to: '/home', label: isKo ? '홈' : t('tabs.home'), Icon: HomeTabIcon },
     { to: '/battle', label: isKo ? '배틀' : t('tabs.battle'), Icon: BattleTabIcon },
-    { to: '/stats', label: isKo ? '기록' : 'Stats', Icon: StatsTabIcon },
+    { to: '/stats', label: isKo ? '기록' : 'Records', Icon: StatsTabIcon },
   ];
 
   return (
     <nav className="tab-bar" aria-label={t('tabs.ariaLabel')}>
       {tabs.map((tab) => (
-        <NavLink
-          key={tab.to}
-          to={tab.to}
-          className={({ isActive }) => (isActive ? 'tab-item tab-item-active' : 'tab-item')}
-        >
+        <NavLink key={tab.to} to={tab.to} className={({ isActive }) => (isActive ? 'tab-item tab-item-active' : 'tab-item')}>
           {({ isActive }) => (
             <>
               <span className="tab-item-icon">
